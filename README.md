@@ -50,3 +50,17 @@ Mobile-friendly for use during clinical shifts
 
 The app is pre-populated with all the program-specific information from the St. Clair documents, including course codes, clinical requirements, important dates, and Synergy requirements. She can start using it immediately and customize it as needed throughout her program.
 The data persists in the browser's local storage, so her information will be saved between sessions. This makes it perfect for personal use while maintaining privacy.
+
+Screenshots
+![Dashboard](screenshots/image.png)
+
+![Assignments](screenshots/image-1.png)
+
+![Clinical](screenshots/image-2.png)
+
+![Requirements](screenshots/image-3.png)
+
+![Study](screenshots/image-4.png)
+
+![Goals](screenshots/image-5.png)
+
