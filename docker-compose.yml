@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  nursing-webapp:
+    build: .
+    container_name: nursing-organizer
+    ports:
+      - "5008:5008"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_APP=app.py
+    volumes:
+      # Mount data directory for SQLite database persistence
+      - ./data:/app/data
+      # Mount favicon directory
+      - ./favicon_io:/app/favicon_io
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5008/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  nursing_data:
+    driver: local

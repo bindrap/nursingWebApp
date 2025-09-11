@@ -145,6 +145,46 @@
         @media (max-width: 640px) {
             input, select, textarea {
                 font-size: 16px; /* Prevents zoom on iOS */
+                padding: 12px; /* Larger touch target */
+            }
+        }
+        
+        /* Mobile-specific spacing */
+        @media (max-width: 768px) {
+            .space-y-6 > * + * {
+                margin-top: 1rem;
+            }
+            
+            .space-y-4 > * + * {
+                margin-top: 0.75rem;
+            }
+            
+            /* Compact mobile cards */
+            .mobile-card {
+                padding: 0.75rem;
+                margin-bottom: 0.5rem;
+            }
+            
+            /* Better mobile buttons */
+            .mobile-btn {
+                padding: 0.75rem 1rem;
+                font-size: 0.875rem;
+                min-height: 44px;
+            }
+        }
+        
+        /* Better mobile scrolling */
+        .mobile-scroll-container {
+            -webkit-overflow-scrolling: touch;
+            overflow-x: auto;
+        }
+        
+        /* Hide scrollbars on mobile but keep functionality */
+        @media (max-width: 768px) {
+            .mobile-scroll::-webkit-scrollbar {
+                display: none;
+                width: 0;
+                background: transparent;
             }
         }
         
@@ -851,51 +891,51 @@
 
                 return (
                     <div className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                            <div className="bg-white p-6 rounded-lg card-shadow">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
+                            <div className="bg-white p-3 md:p-6 rounded-lg card-shadow">
                                 <div className="flex items-center">
-                                    <div className="bg-blue-500 p-3 rounded-lg">
-                                        <i className="fas fa-book text-white text-xl"></i>
+                                    <div className="bg-blue-500 p-2 md:p-3 rounded-lg flex-shrink-0">
+                                        <i className="fas fa-book text-white text-base md:text-xl"></i>
                                     </div>
-                                    <div className="ml-4">
-                                        <p className="text-sm text-gray-600">Assignments</p>
-                                        <p className="text-2xl font-bold">{upcomingAssignments}</p>
+                                    <div className="ml-2 md:ml-4 min-w-0">
+                                        <p className="text-xs md:text-sm text-gray-600 truncate">Assignments</p>
+                                        <p className="text-lg md:text-2xl font-bold">{upcomingAssignments}</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="bg-white p-6 rounded-lg card-shadow">
+                            <div className="bg-white p-3 md:p-6 rounded-lg card-shadow">
                                 <div className="flex items-center">
-                                    <div className="bg-green-500 p-3 rounded-lg">
-                                        <i className="fas fa-hospital text-white text-xl"></i>
+                                    <div className="bg-green-500 p-2 md:p-3 rounded-lg flex-shrink-0">
+                                        <i className="fas fa-hospital text-white text-base md:text-xl"></i>
                                     </div>
-                                    <div className="ml-4">
-                                        <p className="text-sm text-gray-600">Clinical Hours</p>
-                                        <p className="text-2xl font-bold">{totalClinicalHours}</p>
+                                    <div className="ml-2 md:ml-4 min-w-0">
+                                        <p className="text-xs md:text-sm text-gray-600 truncate">Clinical Hours</p>
+                                        <p className="text-lg md:text-2xl font-bold">{totalClinicalHours}</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="bg-white p-6 rounded-lg card-shadow">
+                            <div className="bg-white p-3 md:p-6 rounded-lg card-shadow">
                                 <div className="flex items-center">
-                                    <div className="bg-purple-500 p-3 rounded-lg">
-                                        <i className="fas fa-check text-white text-xl"></i>
+                                    <div className="bg-purple-500 p-2 md:p-3 rounded-lg flex-shrink-0">
+                                        <i className="fas fa-check text-white text-base md:text-xl"></i>
                                     </div>
-                                    <div className="ml-4">
-                                        <p className="text-sm text-gray-600">Completed</p>
-                                        <p className="text-2xl font-bold">{completedAssignments}</p>
+                                    <div className="ml-2 md:ml-4 min-w-0">
+                                        <p className="text-xs md:text-sm text-gray-600 truncate">Completed</p>
+                                        <p className="text-lg md:text-2xl font-bold">{completedAssignments}</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="bg-white p-6 rounded-lg card-shadow">
+                            <div className="bg-white p-3 md:p-6 rounded-lg card-shadow">
                                 <div className="flex items-center">
-                                    <div className="bg-yellow-500 p-3 rounded-lg">
-                                        <i className="fas fa-exclamation text-white text-xl"></i>
+                                    <div className="bg-yellow-500 p-2 md:p-3 rounded-lg flex-shrink-0">
+                                        <i className="fas fa-exclamation text-white text-base md:text-xl"></i>
                                     </div>
-                                    <div className="ml-4">
-                                        <p className="text-sm text-gray-600">Urgent Items</p>
-                                        <p className="text-2xl font-bold">{urgentItems.length}</p>
+                                    <div className="ml-2 md:ml-4 min-w-0">
+                                        <p className="text-xs md:text-sm text-gray-600 truncate">Urgent Items</p>
+                                        <p className="text-lg md:text-2xl font-bold">{urgentItems.length}</p>
                                     </div>
                                 </div>
                             </div>
@@ -938,22 +978,22 @@
                                     <i className="fas fa-trophy mr-2"></i>
                                     Your Achievement Badges
                                 </h3>
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 md:gap-4">
                                     {userAchievements.map((achievementId, index) => {
                                         const achievement = getAchievementData(achievementId);
                                         return (
                                             <div
                                                 key={index}
-                                                className="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 text-center group cursor-pointer"
+                                                className="bg-white p-2 md:p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 text-center group cursor-pointer touch-friendly"
                                                 title={achievement.description}
                                             >
-                                                <div className={`text-3xl mb-2 ${achievement.color} group-hover:scale-110 transition-transform duration-200`}>
+                                                <div className={`text-xl md:text-3xl mb-1 md:mb-2 ${achievement.color} group-hover:scale-110 transition-transform duration-200`}>
                                                     <i className={`fas ${achievement.icon}`}></i>
                                                 </div>
-                                                <div className="text-sm font-semibold text-gray-800 leading-tight">
+                                                <div className="text-xs md:text-sm font-semibold text-gray-800 leading-tight">
                                                     {achievement.title}
                                                 </div>
-                                                <div className="text-xs text-gray-600 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                                <div className="text-xs text-gray-600 mt-1 opacity-0 md:group-hover:opacity-100 transition-opacity duration-200 hidden md:block">
                                                     {achievement.description}
                                                 </div>
                                             </div>
@@ -1538,9 +1578,10 @@
                                     </div>
                                     
                                     <div className="grid grid-cols-7 gap-1 mb-2">
-                                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                                            <div key={day} className="p-2 text-center font-semibold text-gray-600 text-sm">
-                                                {day}
+                                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+                                            <div key={day} className="p-1 md:p-2 text-center font-semibold text-gray-600 text-xs md:text-sm">
+                                                <span className="hidden sm:inline">{day}</span>
+                                                <span className="sm:hidden">{day.substring(0, 1)}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -1552,7 +1593,7 @@
                                                 onClick={() => setSelectedDate(day.dateStr)}
                                                 onDragOver={handleDragOver}
                                                 onDrop={(e) => handleDrop(e, day.dateStr)}
-                                                className={`p-2 min-h-20 border cursor-pointer hover:bg-gray-50 transition-colors ${
+                                                className={`p-1 md:p-2 min-h-16 md:min-h-20 border cursor-pointer hover:bg-gray-50 transition-colors mobile-calendar-day touch-friendly ${
                                                     !day.isCurrentMonth ? 'text-gray-400 bg-gray-50' : ''
                                                 } ${
                                                     day.isToday ? 'bg-purple-100 border-purple-500' : 'border-gray-200'
@@ -1562,23 +1603,26 @@
                                                     draggedItem ? 'drop-target' : ''
                                                 }`}
                                             >
-                                                <div className="font-medium text-sm">{day.date.getDate()}</div>
+                                                <div className="font-medium text-xs md:text-sm">{day.date.getDate()}</div>
                                                 <div className="space-y-1">
-                                                    {day.events.slice(0, 2).map(event => (
+                                                    {day.events.slice(0, window.innerWidth < 768 ? 1 : 2).map(event => (
                                                         <div
                                                             key={event.id}
                                                             draggable={event.category === 'assignment' || event.category === 'clinical'}
                                                             onDragStart={(e) => handleDragStart(e, event)}
-                                                            className={`text-xs p-1 rounded border ${getEventColor(event.category, event.type)} ${
+                                                            className={`text-xs p-1 rounded border mobile-compact-text touch-friendly ${getEventColor(event.category, event.type)} ${
                                                                 (event.category === 'assignment' || event.category === 'clinical') ? 
                                                                 'cursor-move hover:opacity-80' : ''
                                                             }`}
                                                             title={event.event}
                                                         >
-                                                            {(event.category === 'assignment' || event.category === 'clinical') && 
-                                                                <i className="fas fa-grip-lines text-xs opacity-60 mr-1"></i>
-                                                            }
-                                                            {event.event.length > 15 ? event.event.substring(0, 15) + '...' : event.event}
+                                                            <span className="hidden md:inline">
+                                                                {(event.category === 'assignment' || event.category === 'clinical') && 
+                                                                    <i className="fas fa-grip-lines text-xs opacity-60 mr-1"></i>
+                                                                }
+                                                            </span>
+                                                            <span className="md:hidden">{event.event.length > 8 ? event.event.substring(0, 6) + '...' : event.event}</span>
+                                                            <span className="hidden md:inline">{event.event.length > 15 ? event.event.substring(0, 15) + '...' : event.event}</span>
                                                         </div>
                                                     ))}
                                                     {day.events.length > 2 && (
@@ -3264,16 +3308,20 @@
                 <div className="min-h-screen bg-gray-50 theme-transition">
                     <header className="bg-white shadow-sm border-b theme-transition">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                            <div className="flex justify-between items-center py-4">
-                                <div className="flex items-center">
-                                    <img src="favicon_io/apple-touch-icon.png" alt="Nursing Logo" className="w-8 h-8 mr-3" />
-                                    <h1 className="text-2xl font-bold text-gray-900">
-                                        St. Clair Nursing Organizer
+                            <div className="flex justify-between items-center py-3 md:py-4">
+                                <div className="flex items-center min-w-0">
+                                    <img src="favicon_io/apple-touch-icon.png" alt="Nursing Logo" className="w-6 h-6 md:w-8 md:h-8 mr-2 md:mr-3 flex-shrink-0" />
+                                    <h1 className="text-lg md:text-2xl font-bold text-gray-900 truncate">
+                                        <span className="hidden sm:inline">St. Clair Nursing Organizer</span>
+                                        <span className="sm:hidden">Nursing Organizer</span>
                                     </h1>
                                 </div>
-                                <div className="flex items-center space-x-4">
-                                    <div className="text-sm text-gray-600">
+                                <div className="flex items-center space-x-2 md:space-x-4">
+                                    <div className="text-xs md:text-sm text-gray-600 hidden md:block">
                                         Semester {currentSemester} • Practical Nursing Program
+                                    </div>
+                                    <div className="text-xs text-gray-600 md:hidden">
+                                        Sem {currentSemester}
                                     </div>
                                     <ThemeToggle />
                                 </div>
@@ -3283,26 +3331,27 @@
 
                     <nav className="bg-white shadow-sm theme-transition">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                            <div className="flex space-x-4 overflow-x-auto">
+                            <div className="flex space-x-1 md:space-x-4 overflow-x-auto mobile-scroll pb-1">
                                 {tabs.map(tab => (
                                     <button
                                         key={tab.id}
                                         onClick={() => setActiveTab(tab.id)}
-                                        className={`flex items-center px-3 py-4 text-sm font-medium border-b-2 whitespace-nowrap ${
+                                        className={`flex items-center px-2 md:px-3 py-3 md:py-4 text-xs md:text-sm font-medium border-b-2 whitespace-nowrap touch-friendly transition-colors duration-200 ${
                                             activeTab === tab.id
                                                 ? 'border-purple-500 text-purple-600'
                                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                         }`}
                                     >
-                                        <i className={`${tab.icon} mr-2`}></i>
-                                        {tab.label}
+                                        <i className={`${tab.icon} mr-1 md:mr-2 text-sm`}></i>
+                                        <span className="hidden sm:inline">{tab.label}</span>
+                                        <span className="sm:hidden">{tab.label.length > 8 ? tab.label.substring(0, 6) + '...' : tab.label}</span>
                                     </button>
                                 ))}
                             </div>
                         </div>
                     </nav>
 
-                    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    <main className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 md:py-8">
                         {renderActiveTab()}
                     </main>
 
