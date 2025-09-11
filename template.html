@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>St. Clair Nursing School Organizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-shadow {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .progress-bar {
+            transition: width 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // Initial data based on St. Clair program
+        const initialCourses = {
+            1: [
+                { code: 'PNR116', title: 'Introduction To The Practice Of Nursing', credits: 6 },
+                { code: 'PNR125', title: 'Nursing Clinical I', credits: 6 },
+                { code: 'BIO126', title: 'Anatomy, Physiology & Pathophysiology', credits: 7 },
+                { code: 'ELEC1030', title: 'Choose 1 Elective Course', credits: 3 }
+            ],
+            2: [
+                { code: 'PNR217', title: 'Pharmacology & Therapeutics', credits: 2 },
+                { code: 'PNR218', title: 'Health Assessment', credits: 3 },
+                { code: 'PNR220', title: 'Nursing Theory IIA', credits: 2 },
+                { code: 'PNR221', title: 'Nursing Theory IIB', credits: 2 },
+                { code: 'PNR225', title: 'Nursing Clinical II', credits: 8 }
+            ],
+            3: [
+                { code: 'PNR308', title: 'Nursing Theory III A', credits: 2 },
+                { code: 'PNR309', title: 'Nursing Theory III B', credits: 3 },
+                { code: 'PNR315', title: 'Community Health', credits: 2 },
+                { code: 'PNR316', title: 'Nursing Clinical III', credits: 8 },
+                { code: 'ELEC1030', title: 'Choose 1 Elective Course', credits: 3 },
+                { code: 'ELEC1030', title: 'Choose 1 Elective Course', credits: 3 }
+            ],
+            4: [
+                { code: 'PNR408', title: 'Nursing Theory IV A', credits: 3 },
+                { code: 'PNR411', title: 'Nursing Clinical IV', credits: 12 },
+                { code: 'PNR413', title: 'Nursing Theory IV B', credits: 3 },
+                { code: 'PNR415', title: 'Management Leadership & Research', credits: 2 }
+            ],
+            5: [
+                { code: 'PNR513', title: 'Comprehensive Clinical Experience', credits: 27 }
+            ]
+        };
+
+        const initialRequirements = [
+            { name: 'ERV Letter (Year 1)', deadline: '2025-08-01', status: 'pending', renewalMonths: 12 },
+            { name: 'ERV Letter (Year 2)', deadline: '2026-08-01', status: 'pending', renewalMonths: 12 },
+            { name: 'Health Assessment Record', deadline: '2025-08-01', status: 'pending', renewalMonths: 12 },
+            { name: 'CPR-BLS', deadline: '2025-08-01', status: 'pending', renewalMonths: 12 },
+            { name: 'Standard First Aid', deadline: '2025-08-01', status: 'pending', renewalMonths: 36 },
+            { name: 'Mask Fit', deadline: '2025-08-01', status: 'pending', renewalMonths: 24 },
+            { name: 'Police Vulnerable Sector Check', deadline: '2025-08-01', status: 'pending', renewalMonths: 12 }
+        ];
+
+        const importantDates = [
+            { date: '2025-08-01', event: 'Medical & Non-medical Clinical Clearance Deadline', type: 'deadline' },
+            { date: '2025-09-02', event: 'Classes Begin', type: 'start' },
+            { date: '2025-09-04', event: 'PNR 316 Orientation & Math Test (Sections 10-18)', type: 'exam' },
+            { date: '2025-09-05', event: 'PNR 316 Orientation & Math Test (Sections 1-9)', type: 'exam' },
+            { date: '2025-10-13', event: 'Thanksgiving Holiday', type: 'holiday' },
+            { date: '2025-12-08', event: 'Exam Week Begins', type: 'exam' },
+            { date: '2025-12-12', event: 'Exam Week Ends', type: 'exam' }
+        ];
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [assignments, setAssignments] = useState([]);
+            const [clinicalShifts, setClinicalShifts] = useState([]);
+            const [requirements, setRequirements] = useState(initialRequirements);
+            const [goals, setGoals] = useState([]);
+            const [currentSemester, setCurrentSemester] = useState(1);
+
+            // Load data from localStorage
+            useEffect(() => {
+                const savedData = localStorage.getItem('nursingAppData');
+                if (savedData) {
+                    const parsed = JSON.parse(savedData);
+                    setAssignments(parsed.assignments || []);
+                    setClinicalShifts(parsed.clinicalShifts || []);
+                    setRequirements(parsed.requirements || initialRequirements);
+                    setGoals(parsed.goals || []);
+                    setCurrentSemester(parsed.currentSemester || 1);
+                }
+            }, []);
+
+            // Save data to localStorage
+            useEffect(() => {
+                const dataToSave = {
+                    assignments,
+                    clinicalShifts,
+                    requirements,
+                    goals,
+                    currentSemester
+                };
+                localStorage.setItem('nursingAppData', JSON.stringify(dataToSave));
+            }, [assignments, clinicalShifts, requirements, goals, currentSemester]);
+
+            const getDaysUntil = (dateString) => {
+                const today = new Date();
+                const targetDate = new Date(dateString);
+                const diffTime = targetDate - today;
+                return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            };
+
+            const upcomingEvents = useMemo(() => {
+                const events = [...importantDates];
+                assignments.forEach(assignment => {
+                    if (!assignment.completed) {
+                        events.push({
+                            date: assignment.dueDate,
+                            event: `${assignment.title} Due`,
+                            type: 'assignment'
+                        });
+                    }
+                });
+                clinicalShifts.forEach(shift => {
+                    events.push({
+                        date: shift.date,
+                        event: `Clinical Shift - ${shift.location}`,
+                        type: 'clinical'
+                    });
+                });
+                
+                return events
+                    .filter(event => getDaysUntil(event.date) >= 0)
+                    .sort((a, b) => new Date(a.date) - new Date(b.date))
+                    .slice(0, 5);
+            }, [assignments, clinicalShifts]);
+
+            const Dashboard = () => {
+                const overallProgress = useMemo(() => {
+                    const totalCredits = Object.values(initialCourses).flat().reduce((sum, course) => sum + course.credits, 0);
+                    const completedCredits = Object.values(initialCourses)
+                        .slice(0, currentSemester)
+                        .flat()
+                        .reduce((sum, course) => sum + course.credits, 0);
+                    return Math.round((completedCredits / totalCredits) * 100);
+                }, [currentSemester]);
+
+                const urgentRequirements = requirements.filter(req => {
+                    const daysUntil = getDaysUntil(req.deadline);
+                    return req.status === 'pending' && daysUntil <= 30;
+                });
+
+                return (
+                    <div className="space-y-6">
+                        <div className="gradient-bg text-white p-6 rounded-lg card-shadow">
+                            <h2 className="text-2xl font-bold mb-2">Welcome Back!</h2>
+                            <p className="text-lg">You're {overallProgress}% through your Practical Nursing Program</p>
+                            <div className="mt-4 bg-white bg-opacity-20 rounded-full h-3">
+                                <div 
+                                    className="bg-white h-3 rounded-full progress-bar"
+                                    style={{ width: `${overallProgress}%` }}
+                                ></div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-lg font-semibold mb-4 text-gray-800">
+                                    <i className="fas fa-calendar-alt mr-2 text-blue-500"></i>
+                                    Upcoming Events
+                                </h3>
+                                <div className="space-y-3">
+                                    {upcomingEvents.map((event, index) => {
+                                        const daysUntil = getDaysUntil(event.date);
+                                        return (
+                                            <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                                                <div>
+                                                    <p className="font-medium text-sm">{event.event}</p>
+                                                    <p className="text-xs text-gray-600">{event.date}</p>
+                                                </div>
+                                                <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                    daysUntil <= 3 ? 'bg-red-100 text-red-800' :
+                                                    daysUntil <= 7 ? 'bg-yellow-100 text-yellow-800' :
+                                                    'bg-green-100 text-green-800'
+                                                }`}>
+                                                    {daysUntil === 0 ? 'Today' : 
+                                                     daysUntil === 1 ? 'Tomorrow' : 
+                                                     `${daysUntil} days`}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-lg font-semibold mb-4 text-gray-800">
+                                    <i className="fas fa-exclamation-triangle mr-2 text-orange-500"></i>
+                                    Urgent Requirements
+                                </h3>
+                                <div className="space-y-3">
+                                    {urgentRequirements.length === 0 ? (
+                                        <p className="text-green-600 text-sm">All requirements up to date!</p>
+                                    ) : (
+                                        urgentRequirements.map((req, index) => (
+                                            <div key={index} className="p-2 bg-red-50 border-l-4 border-red-500 rounded">
+                                                <p className="font-medium text-sm">{req.name}</p>
+                                                <p className="text-xs text-red-600">Due: {req.deadline}</p>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-lg font-semibold mb-4 text-gray-800">
+                                    <i className="fas fa-graduation-cap mr-2 text-purple-500"></i>
+                                    Current Semester
+                                </h3>
+                                <div className="space-y-2">
+                                    <p className="text-2xl font-bold text-purple-600">Semester {currentSemester}</p>
+                                    <p className="text-sm text-gray-600">
+                                        {initialCourses[currentSemester]?.length || 0} courses this semester
+                                    </p>
+                                    <div className="mt-4">
+                                        <select 
+                                            value={currentSemester} 
+                                            onChange={(e) => setCurrentSemester(Number(e.target.value))}
+                                            className="w-full p-2 border rounded"
+                                        >
+                                            {[1,2,3,4,5].map(sem => (
+                                                <option key={sem} value={sem}>Semester {sem}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const AssignmentTracker = () => {
+                const [newAssignment, setNewAssignment] = useState({
+                    title: '',
+                    course: '',
+                    dueDate: '',
+                    weight: '',
+                    status: 'not-started'
+                });
+
+                const addAssignment = () => {
+                    if (newAssignment.title && newAssignment.course && newAssignment.dueDate) {
+                        setAssignments([...assignments, { 
+                            ...newAssignment, 
+                            id: Date.now(),
+                            completed: false 
+                        }]);
+                        setNewAssignment({
+                            title: '',
+                            course: '',
+                            dueDate: '',
+                            weight: '',
+                            status: 'not-started'
+                        });
+                    }
+                };
+
+                const toggleComplete = (id) => {
+                    setAssignments(assignments.map(assignment => 
+                        assignment.id === id ? 
+                        { ...assignment, completed: !assignment.completed } : 
+                        assignment
+                    ));
+                };
+
+                const deleteAssignment = (id) => {
+                    setAssignments(assignments.filter(assignment => assignment.id !== id));
+                };
+
+                return (
+                    <div className="space-y-6">
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <h3 className="text-xl font-semibold mb-4">Add New Assignment</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                                <input
+                                    type="text"
+                                    placeholder="Assignment Title"
+                                    value={newAssignment.title}
+                                    onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <select
+                                    value={newAssignment.course}
+                                    onChange={(e) => setNewAssignment({...newAssignment, course: e.target.value})}
+                                    className="p-2 border rounded"
+                                >
+                                    <option value="">Select Course</option>
+                                    {initialCourses[currentSemester]?.map(course => (
+                                        <option key={course.code} value={course.code}>
+                                            {course.code}
+                                        </option>
+                                    ))}
+                                </select>
+                                <input
+                                    type="date"
+                                    value={newAssignment.dueDate}
+                                    onChange={(e) => setNewAssignment({...newAssignment, dueDate: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <input
+                                    type="number"
+                                    placeholder="Weight %"
+                                    value={newAssignment.weight}
+                                    onChange={(e) => setNewAssignment({...newAssignment, weight: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <button
+                                    onClick={addAssignment}
+                                    className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+                                >
+                                    Add Assignment
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-lg card-shadow overflow-hidden">
+                            <div className="p-6 border-b">
+                                <h3 className="text-xl font-semibold">Assignments</h3>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assignment</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Course</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Due Date</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Weight</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {assignments.map(assignment => {
+                                            const daysUntil = getDaysUntil(assignment.dueDate);
+                                            return (
+                                                <tr key={assignment.id} className={assignment.completed ? 'bg-green-50' : ''}>
+                                                    <td className="px-6 py-4">
+                                                        <div className={`font-medium ${assignment.completed ? 'line-through text-gray-500' : ''}`}>
+                                                            {assignment.title}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-gray-600">{assignment.course}</td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="text-gray-600">{assignment.dueDate}</div>
+                                                        <div className={`text-xs ${
+                                                            daysUntil < 0 ? 'text-red-600' :
+                                                            daysUntil <= 3 ? 'text-orange-600' :
+                                                            'text-gray-500'
+                                                        }`}>
+                                                            {daysUntil < 0 ? `${Math.abs(daysUntil)} days overdue` :
+                                                             daysUntil === 0 ? 'Due today' :
+                                                             `${daysUntil} days left`}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-gray-600">{assignment.weight}%</td>
+                                                    <td className="px-6 py-4">
+                                                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                            assignment.completed ? 'bg-green-100 text-green-800' :
+                                                            daysUntil <= 3 ? 'bg-red-100 text-red-800' :
+                                                            'bg-yellow-100 text-yellow-800'
+                                                        }`}>
+                                                            {assignment.completed ? 'Completed' :
+                                                             daysUntil <= 3 ? 'Urgent' : 'Pending'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex space-x-2">
+                                                            <button
+                                                                onClick={() => toggleComplete(assignment.id)}
+                                                                className={`px-3 py-1 rounded text-xs ${
+                                                                    assignment.completed ? 
+                                                                    'bg-gray-500 text-white' : 
+                                                                    'bg-green-500 text-white'
+                                                                }`}
+                                                            >
+                                                                {assignment.completed ? 'Undo' : 'Complete'}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => deleteAssignment(assignment.id)}
+                                                                className="px-3 py-1 rounded text-xs bg-red-500 text-white"
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                                {assignments.length === 0 && (
+                                    <div className="p-8 text-center text-gray-500">
+                                        No assignments added yet. Add your first assignment above!
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const ClinicalTracker = () => {
+                const [newShift, setNewShift] = useState({
+                    date: '',
+                    startTime: '',
+                    endTime: '',
+                    location: '',
+                    unit: '',
+                    hours: ''
+                });
+
+                const addShift = () => {
+                    if (newShift.date && newShift.location && newShift.hours) {
+                        setClinicalShifts([...clinicalShifts, { 
+                            ...newShift, 
+                            id: Date.now()
+                        }]);
+                        setNewShift({
+                            date: '',
+                            startTime: '',
+                            endTime: '',
+                            location: '',
+                            unit: '',
+                            hours: ''
+                        });
+                    }
+                };
+
+                const deleteShift = (id) => {
+                    setClinicalShifts(clinicalShifts.filter(shift => shift.id !== id));
+                };
+
+                const totalHours = clinicalShifts.reduce((sum, shift) => sum + Number(shift.hours || 0), 0);
+                
+                // Clinical hours requirements by semester
+                const requiredHours = {
+                    1: 42, // 6 credits × 7 hours per credit (approximate)
+                    2: 56, // 8 credits × 7 hours per credit
+                    3: 56, // 8 credits × 7 hours per credit
+                    4: 84, // 12 credits × 7 hours per credit
+                    5: 400 // 400 hours stated in program
+                };
+
+                return (
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-lg font-semibold mb-2">Total Clinical Hours</h3>
+                                <p className="text-3xl font-bold text-blue-600">{totalHours}</p>
+                                <p className="text-sm text-gray-600">Hours completed</p>
+                            </div>
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-lg font-semibold mb-2">Required This Semester</h3>
+                                <p className="text-3xl font-bold text-green-600">{requiredHours[currentSemester] || 0}</p>
+                                <p className="text-sm text-gray-600">Semester {currentSemester} requirement</p>
+                            </div>
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-lg font-semibold mb-2">Progress</h3>
+                                <p className="text-3xl font-bold text-purple-600">
+                                    {Math.round((totalHours / (requiredHours[currentSemester] || 1)) * 100)}%
+                                </p>
+                                <div className="mt-2 bg-gray-200 rounded-full h-2">
+                                    <div 
+                                        className="bg-purple-600 h-2 rounded-full progress-bar"
+                                        style={{ width: `${Math.min((totalHours / (requiredHours[currentSemester] || 1)) * 100, 100)}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <h3 className="text-xl font-semibold mb-4">Add Clinical Shift</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
+                                <input
+                                    type="date"
+                                    value={newShift.date}
+                                    onChange={(e) => setNewShift({...newShift, date: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <input
+                                    type="time"
+                                    placeholder="Start Time"
+                                    value={newShift.startTime}
+                                    onChange={(e) => setNewShift({...newShift, startTime: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <input
+                                    type="time"
+                                    placeholder="End Time"
+                                    value={newShift.endTime}
+                                    onChange={(e) => setNewShift({...newShift, endTime: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <select
+                                    value={newShift.location}
+                                    onChange={(e) => setNewShift({...newShift, location: e.target.value})}
+                                    className="p-2 border rounded"
+                                >
+                                    <option value="">Select Location</option>
+                                    <option value="Windsor Regional Hospital - Met Campus">WRH - Met Campus</option>
+                                    <option value="Windsor Regional Hospital - Ouellette Campus">WRH - Ouellette Campus</option>
+                                    <option value="Hotel Dieu Grace Healthcare">Hotel Dieu Grace</option>
+                                    <option value="Long Term Care">Long Term Care</option>
+                                </select>
+                                <input
+                                    type="text"
+                                    placeholder="Unit/Department"
+                                    value={newShift.unit}
+                                    onChange={(e) => setNewShift({...newShift, unit: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <input
+                                    type="number"
+                                    step="0.5"
+                                    placeholder="Hours"
+                                    value={newShift.hours}
+                                    onChange={(e) => setNewShift({...newShift, hours: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <button
+                                    onClick={addShift}
+                                    className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+                                >
+                                    Add Shift
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-lg card-shadow overflow-hidden">
+                            <div className="p-6 border-b">
+                                <h3 className="text-xl font-semibold">Clinical Shifts</h3>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hours</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {clinicalShifts.map(shift => (
+                                            <tr key={shift.id}>
+                                                <td className="px-6 py-4 font-medium">{shift.date}</td>
+                                                <td className="px-6 py-4 text-gray-600">
+                                                    {shift.startTime && shift.endTime ? 
+                                                        `${shift.startTime} - ${shift.endTime}` : 
+                                                        'Time not specified'}
+                                                </td>
+                                                <td className="px-6 py-4 text-gray-600">{shift.location}</td>
+                                                <td className="px-6 py-4 text-gray-600">{shift.unit}</td>
+                                                <td className="px-6 py-4 font-semibold text-blue-600">{shift.hours}h</td>
+                                                <td className="px-6 py-4">
+                                                    <button
+                                                        onClick={() => deleteShift(shift.id)}
+                                                        className="px-3 py-1 rounded text-xs bg-red-500 text-white"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {clinicalShifts.length === 0 && (
+                                    <div className="p-8 text-center text-gray-500">
+                                        No clinical shifts added yet. Add your first shift above!
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const RequirementsTracker = () => {
+                const updateRequirement = (index, field, value) => {
+                    const updated = requirements.map((req, i) => 
+                        i === index ? { ...req, [field]: value } : req
+                    );
+                    setRequirements(updated);
+                };
+
+                const addCustomRequirement = () => {
+                    const newReq = {
+                        name: 'Custom Requirement',
+                        deadline: new Date().toISOString().split('T')[0],
+                        status: 'pending',
+                        renewalMonths: 12
+                    };
+                    setRequirements([...requirements, newReq]);
+                };
+
+                return (
+                    <div className="space-y-6">
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-xl font-semibold">Clinical Placement Requirements</h3>
+                                <button
+                                    onClick={addCustomRequirement}
+                                    className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                                >
+                                    Add Custom Requirement
+                                </button>
+                            </div>
+                            
+                            <div className="bg-blue-50 p-4 rounded-lg mb-6">
+                                <h4 className="font-semibold text-blue-800 mb-2">Synergy Gateway Information</h4>
+                                <p className="text-sm text-blue-700 mb-2">
+                                    Review Fee: $50.50 + tax | Follow-up Fee: $10.00 + tax
+                                </p>
+                                <p className="text-xs text-blue-600">
+                                    All requirements must be submitted through the Verified platform before clinical placement begins.
+                                </p>
+                            </div>
+
+                            <div className="grid gap-4">
+                                {requirements.map((req, index) => {
+                                    const daysUntil = getDaysUntil(req.deadline);
+                                    return (
+                                        <div key={index} className={`p-4 border rounded-lg ${
+                                            req.status === 'completed' ? 'bg-green-50 border-green-200' :
+                                            daysUntil <= 7 ? 'bg-red-50 border-red-200' :
+                                            daysUntil <= 30 ? 'bg-yellow-50 border-yellow-200' :
+                                            'bg-gray-50 border-gray-200'
+                                        }`}>
+                                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+                                                <div>
+                                                    <input
+                                                        type="text"
+                                                        value={req.name}
+                                                        onChange={(e) => updateRequirement(index, 'name', e.target.value)}
+                                                        className="w-full p-2 border rounded font-medium"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <input
+                                                        type="date"
+                                                        value={req.deadline}
+                                                        onChange={(e) => updateRequirement(index, 'deadline', e.target.value)}
+                                                        className="w-full p-2 border rounded"
+                                                    />
+                                                    <p className={`text-xs mt-1 ${
+                                                        daysUntil < 0 ? 'text-red-600' :
+                                                        daysUntil <= 7 ? 'text-orange-600' :
+                                                        'text-gray-500'
+                                                    }`}>
+                                                        {daysUntil < 0 ? `${Math.abs(daysUntil)} days overdue` :
+                                                         daysUntil === 0 ? 'Due today' :
+                                                         `${daysUntil} days left`}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <select
+                                                        value={req.status}
+                                                        onChange={(e) => updateRequirement(index, 'status', e.target.value)}
+                                                        className="w-full p-2 border rounded"
+                                                    >
+                                                        <option value="pending">Pending</option>
+                                                        <option value="in-progress">In Progress</option>
+                                                        <option value="completed">Completed</option>
+                                                        <option value="expired">Expired</option>
+                                                    </select>
+                                                </div>
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-sm text-gray-600">
+                                                        Renews every {req.renewalMonths} months
+                                                    </span>
+                                                    <button
+                                                        onClick={() => setRequirements(requirements.filter((_, i) => i !== index))}
+                                                        className="text-red-500 hover:text-red-700"
+                                                    >
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <h3 className="text-xl font-semibold mb-4">Math Test Preparation</h3>
+                            <div className="bg-orange-50 p-4 rounded-lg mb-4">
+                                <h4 className="font-semibold text-orange-800 mb-2">Year 2 Math Test Requirements</h4>
+                                <ul className="text-sm text-orange-700 space-y-1">
+                                    <li>• Score required: 18/20 (90%)</li>
+                                    <li>• Topics: Insulin calculations, Hypoglycemia protocols</li>
+                                    <li>• Hands-on component: Drawing up doses, calculating drip rates</li>
+                                    <li>• Date: September 4-5, 2025 (orientation day)</li>
+                                </ul>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="text-center p-4 bg-blue-50 rounded">
+                                    <i className="fas fa-calculator text-2xl text-blue-500 mb-2"></i>
+                                    <h4 className="font-semibold">Practice Math</h4>
+                                    <p className="text-sm text-gray-600">Review dosage calculations</p>
+                                </div>
+                                <div className="text-center p-4 bg-green-50 rounded">
+                                    <i className="fas fa-syringe text-2xl text-green-500 mb-2"></i>
+                                    <h4 className="font-semibold">Insulin Orders</h4>
+                                    <p className="text-sm text-gray-600">Study insulin protocols</p>
+                                </div>
+                                <div className="text-center p-4 bg-purple-50 rounded">
+                                    <i className="fas fa-heartbeat text-2xl text-purple-500 mb-2"></i>
+                                    <h4 className="font-semibold">Hypoglycemia</h4>
+                                    <p className="text-sm text-gray-600">Review emergency protocols</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const StudyPlanner = () => {
+                const [studyTimer, setStudyTimer] = useState(25 * 60); // 25 minutes in seconds
+                const [isRunning, setIsRunning] = useState(false);
+                const [flashcards, setFlashcards] = useState([]);
+                const [newCard, setNewCard] = useState({ question: '', answer: '' });
+                const [currentCardIndex, setCurrentCardIndex] = useState(0);
+                const [showAnswer, setShowAnswer] = useState(false);
+
+                useEffect(() => {
+                    let interval = null;
+                    if (isRunning && studyTimer > 0) {
+                        interval = setInterval(() => {
+                            setStudyTimer(timer => timer - 1);
+                        }, 1000);
+                    } else if (studyTimer === 0) {
+                        setIsRunning(false);
+                        alert('Study session complete! Take a 5-minute break.');
+                        setStudyTimer(25 * 60);
+                    }
+                    return () => clearInterval(interval);
+                }, [isRunning, studyTimer]);
+
+                const formatTime = (seconds) => {
+                    const mins = Math.floor(seconds / 60);
+                    const secs = seconds % 60;
+                    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                };
+
+                const addFlashcard = () => {
+                    if (newCard.question && newCard.answer) {
+                        setFlashcards([...flashcards, { ...newCard, id: Date.now() }]);
+                        setNewCard({ question: '', answer: '' });
+                    }
+                };
+
+                const nextCard = () => {
+                    setCurrentCardIndex((currentCardIndex + 1) % flashcards.length);
+                    setShowAnswer(false);
+                };
+
+                const prevCard = () => {
+                    setCurrentCardIndex(currentCardIndex === 0 ? flashcards.length - 1 : currentCardIndex - 1);
+                    setShowAnswer(false);
+                };
+
+                return (
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-xl font-semibold mb-4">Pomodoro Timer</h3>
+                                <div className="text-center">
+                                    <div className="text-6xl font-bold text-blue-600 mb-4">
+                                        {formatTime(studyTimer)}
+                                    </div>
+                                    <div className="space-x-4">
+                                        <button
+                                            onClick={() => setIsRunning(!isRunning)}
+                                            className={`px-6 py-2 rounded font-semibold ${
+                                                isRunning ? 'bg-red-500 text-white' : 'bg-green-500 text-white'
+                                            }`}
+                                        >
+                                            {isRunning ? 'Pause' : 'Start'}
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setStudyTimer(25 * 60);
+                                                setIsRunning(false);
+                                            }}
+                                            className="px-6 py-2 rounded font-semibold bg-gray-500 text-white"
+                                        >
+                                            Reset
+                                        </button>
+                                    </div>
+                                    <div className="mt-4 space-x-2">
+                                        <button
+                                            onClick={() => setStudyTimer(25 * 60)}
+                                            className="px-3 py-1 rounded text-sm bg-blue-100 text-blue-700"
+                                        >
+                                            25 min
+                                        </button>
+                                        <button
+                                            onClick={() => setStudyTimer(5 * 60)}
+                                            className="px-3 py-1 rounded text-sm bg-green-100 text-green-700"
+                                        >
+                                            5 min
+                                        </button>
+                                        <button
+                                            onClick={() => setStudyTimer(15 * 60)}
+                                            className="px-3 py-1 rounded text-sm bg-yellow-100 text-yellow-700"
+                                        >
+                                            15 min
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-xl font-semibold mb-4">Quick Notes</h3>
+                                <textarea
+                                    placeholder="Write your study notes here..."
+                                    className="w-full h-40 p-3 border rounded resize-none"
+                                    defaultValue={localStorage.getItem('studyNotes') || ''}
+                                    onChange={(e) => localStorage.setItem('studyNotes', e.target.value)}
+                                ></textarea>
+                            </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <h3 className="text-xl font-semibold mb-4">Flashcards</h3>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                <input
+                                    type="text"
+                                    placeholder="Question/Term"
+                                    value={newCard.question}
+                                    onChange={(e) => setNewCard({...newCard, question: e.target.value})}
+                                    className="p-3 border rounded"
+                                />
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Answer/Definition"
+                                        value={newCard.answer}
+                                        onChange={(e) => setNewCard({...newCard, answer: e.target.value})}
+                                        className="flex-1 p-3 border rounded"
+                                    />
+                                    <button
+                                        onClick={addFlashcard}
+                                        className="px-4 py-3 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+
+                            {flashcards.length > 0 && (
+                                <div className="text-center">
+                                    <div className="bg-gray-50 p-8 rounded-lg mb-4 min-h-48 flex flex-col justify-center">
+                                        <div className="text-lg font-semibold mb-4">
+                                            Card {currentCardIndex + 1} of {flashcards.length}
+                                        </div>
+                                        <div className="text-xl mb-4">
+                                            {flashcards[currentCardIndex]?.question}
+                                        </div>
+                                        {showAnswer && (
+                                            <div className="text-lg text-blue-600 border-t pt-4">
+                                                {flashcards[currentCardIndex]?.answer}
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="space-x-4">
+                                        <button
+                                            onClick={prevCard}
+                                            className="px-4 py-2 bg-gray-500 text-white rounded"
+                                            disabled={flashcards.length <= 1}
+                                        >
+                                            Previous
+                                        </button>
+                                        <button
+                                            onClick={() => setShowAnswer(!showAnswer)}
+                                            className="px-4 py-2 bg-blue-500 text-white rounded"
+                                        >
+                                            {showAnswer ? 'Hide Answer' : 'Show Answer'}
+                                        </button>
+                                        <button
+                                            onClick={nextCard}
+                                            className="px-4 py-2 bg-gray-500 text-white rounded"
+                                            disabled={flashcards.length <= 1}
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {flashcards.length === 0 && (
+                                <div className="text-center text-gray-500 py-8">
+                                    No flashcards yet. Add your first flashcard above!
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            };
+
+            const GoalsTracker = () => {
+                const [newGoal, setNewGoal] = useState({
+                    title: '',
+                    description: '',
+                    targetDate: '',
+                    category: 'academic'
+                });
+
+                const addGoal = () => {
+                    if (newGoal.title && newGoal.targetDate) {
+                        setGoals([...goals, { 
+                            ...newGoal, 
+                            id: Date.now(),
+                            completed: false,
+                            createdDate: new Date().toISOString().split('T')[0]
+                        }]);
+                        setNewGoal({
+                            title: '',
+                            description: '',
+                            targetDate: '',
+                            category: 'academic'
+                        });
+                    }
+                };
+
+                const toggleGoal = (id) => {
+                    setGoals(goals.map(goal => 
+                        goal.id === id ? { ...goal, completed: !goal.completed } : goal
+                    ));
+                };
+
+                const deleteGoal = (id) => {
+                    setGoals(goals.filter(goal => goal.id !== id));
+                };
+
+                const categoryColors = {
+                    academic: 'bg-blue-100 text-blue-800',
+                    clinical: 'bg-green-100 text-green-800',
+                    personal: 'bg-purple-100 text-purple-800',
+                    career: 'bg-orange-100 text-orange-800'
+                };
+
+                return (
+                    <div className="space-y-6">
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <h3 className="text-xl font-semibold mb-4">Add New Goal</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <input
+                                    type="text"
+                                    placeholder="Goal Title"
+                                    value={newGoal.title}
+                                    onChange={(e) => setNewGoal({...newGoal, title: e.target.value})}
+                                    className="p-3 border rounded"
+                                />
+                                <input
+                                    type="date"
+                                    value={newGoal.targetDate}
+                                    onChange={(e) => setNewGoal({...newGoal, targetDate: e.target.value})}
+                                    className="p-3 border rounded"
+                                />
+                                <select
+                                    value={newGoal.category}
+                                    onChange={(e) => setNewGoal({...newGoal, category: e.target.value})}
+                                    className="p-3 border rounded"
+                                >
+                                    <option value="academic">Academic</option>
+                                    <option value="clinical">Clinical</option>
+                                    <option value="personal">Personal</option>
+                                    <option value="career">Career</option>
+                                </select>
+                                <button
+                                    onClick={addGoal}
+                                    className="bg-blue-500 text-white p-3 rounded hover:bg-blue-600"
+                                >
+                                    Add Goal
+                                </button>
+                            </div>
+                            <textarea
+                                placeholder="Goal Description (optional)"
+                                value={newGoal.description}
+                                onChange={(e) => setNewGoal({...newGoal, description: e.target.value})}
+                                className="w-full p-3 border rounded mt-4"
+                                rows="3"
+                            ></textarea>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {goals.map(goal => {
+                                const daysUntil = getDaysUntil(goal.targetDate);
+                                return (
+                                    <div key={goal.id} className={`bg-white p-6 rounded-lg card-shadow ${
+                                        goal.completed ? 'opacity-75' : ''
+                                    }`}>
+                                        <div className="flex justify-between items-start mb-3">
+                                            <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                categoryColors[goal.category]
+                                            }`}>
+                                                {goal.category}
+                                            </span>
+                                            <div className="flex space-x-2">
+                                                <button
+                                                    onClick={() => toggleGoal(goal.id)}
+                                                    className={`text-sm ${
+                                                        goal.completed ? 'text-green-600' : 'text-gray-400'
+                                                    }`}
+                                                >
+                                                    <i className={`fas ${
+                                                        goal.completed ? 'fa-check-circle' : 'fa-circle'
+                                                    }`}></i>
+                                                </button>
+                                                <button
+                                                    onClick={() => deleteGoal(goal.id)}
+                                                    className="text-red-500 text-sm"
+                                                >
+                                                    <i className="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <h4 className={`font-semibold text-lg mb-2 ${
+                                            goal.completed ? 'line-through text-gray-500' : ''
+                                        }`}>
+                                            {goal.title}
+                                        </h4>
+                                        
+                                        {goal.description && (
+                                            <p className="text-gray-600 text-sm mb-3">{goal.description}</p>
+                                        )}
+                                        
+                                        <div className="text-sm text-gray-500">
+                                            <p>Target: {goal.targetDate}</p>
+                                            <p className={
+                                                daysUntil < 0 ? 'text-red-600' :
+                                                daysUntil <= 7 ? 'text-orange-600' :
+                                                'text-green-600'
+                                            }>
+                                                {daysUntil < 0 ? `${Math.abs(daysUntil)} days overdue` :
+                                                 daysUntil === 0 ? 'Due today' :
+                                                 `${daysUntil} days left`}
+                                            </p>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {goals.length === 0 && (
+                            <div className="bg-white p-12 rounded-lg card-shadow text-center">
+                                <i className="fas fa-bullseye text-4xl text-gray-300 mb-4"></i>
+                                <h3 className="text-xl font-semibold text-gray-600 mb-2">No Goals Set</h3>
+                                <p className="text-gray-500">Add your first goal to start tracking your progress!</p>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            const tabs = [
+                { id: 'dashboard', label: 'Dashboard', icon: 'fas fa-home' },
+                { id: 'assignments', label: 'Assignments', icon: 'fas fa-book' },
+                { id: 'clinical', label: 'Clinical', icon: 'fas fa-hospital' },
+                { id: 'requirements', label: 'Requirements', icon: 'fas fa-clipboard-check' },
+                { id: 'study', label: 'Study', icon: 'fas fa-graduation-cap' },
+                { id: 'goals', label: 'Goals', icon: 'fas fa-bullseye' }
+            ];
+
+            const renderActiveTab = () => {
+                switch (activeTab) {
+                    case 'dashboard': return <Dashboard />;
+                    case 'assignments': return <AssignmentTracker />;
+                    case 'clinical': return <ClinicalTracker />;
+                    case 'requirements': return <RequirementsTracker />;
+                    case 'study': return <StudyPlanner />;
+                    case 'goals': return <GoalsTracker />;
+                    default: return <Dashboard />;
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    <header className="bg-white shadow-sm border-b">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex justify-between items-center py-4">
+                                <div className="flex items-center">
+                                    <i className="fas fa-user-nurse text-2xl text-purple-600 mr-3"></i>
+                                    <h1 className="text-2xl font-bold text-gray-900">
+                                        St. Clair Nursing Organizer
+                                    </h1>
+                                </div>
+                                <div className="text-sm text-gray-600">
+                                    Semester {currentSemester} • Practical Nursing Program
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <nav className="bg-white shadow-sm">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex space-x-8 overflow-x-auto">
+                                {tabs.map(tab => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`flex items-center px-3 py-4 text-sm font-medium border-b-2 whitespace-nowrap ${
+                                            activeTab === tab.id
+                                                ? 'border-purple-500 text-purple-600'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        <i className={`${tab.icon} mr-2`}></i>
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </nav>
+
+                    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                        {renderActiveTab()}
+                    </main>
+
+                    <footer className="bg-white border-t mt-12">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                            <div className="text-center text-sm text-gray-500">
+                                Made with ❤️ for your nursing school success • Data is saved locally in your browser
+                            </div>
+                        </div>
+                    </footer>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
