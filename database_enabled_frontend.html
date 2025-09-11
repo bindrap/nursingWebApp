@@ -100,6 +100,54 @@
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2) !important;
         }
         
+        /* Mobile-specific improvements */
+        @media (max-width: 768px) {
+            .touch-friendly {
+                min-height: 44px;
+                min-width: 44px;
+            }
+            
+            .mobile-scroll {
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+            }
+            
+            .mobile-scroll::-webkit-scrollbar {
+                display: none;
+            }
+            
+            .mobile-calendar-day {
+                min-height: 80px;
+                max-height: 120px;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            .mobile-compact-text {
+                font-size: 0.75rem;
+                line-height: 1.2;
+            }
+            
+            .mobile-touch-area {
+                padding: 8px;
+                margin: 2px;
+            }
+        }
+        
+        /* Ensure buttons are touch-friendly */
+        button, .btn {
+            min-height: 44px;
+            touch-action: manipulation;
+        }
+        
+        /* Better mobile form inputs */
+        @media (max-width: 640px) {
+            input, select, textarea {
+                font-size: 16px; /* Prevents zoom on iOS */
+            }
+        }
+        
         /* Drag and Drop styles */
         .drop-target {
             background-color: #e0e7ff !important;
@@ -715,6 +763,85 @@
             }
 
             // Dashboard Component
+            const MotivationalQuotes = () => {
+                const nursingQuotes = [
+                    { quote: "Nursing is not just a profession, it's a calling to serve humanity with compassion.", author: "Anonymous" },
+                    { quote: "Every day you have the opportunity to learn something new, to grow as a nurse, and to make a difference.", author: "Anonymous" },
+                    { quote: "Caring is the essence of nursing.", author: "Jean Watson" },
+                    { quote: "To care for others, you must first learn to care for yourself.", author: "Anonymous" },
+                    { quote: "Nurses may not be angels, but they are the next best thing.", author: "Anonymous" },
+                    { quote: "The trained nurse has become one of the great blessings of humanity.", author: "William Osler" },
+                    { quote: "Nursing is a work of heart.", author: "Anonymous" },
+                    { quote: "Your study today shapes the lives you'll save tomorrow.", author: "Anonymous" },
+                    { quote: "Every difficult assignment completed makes you stronger for the next patient you'll care for.", author: "Anonymous" },
+                    { quote: "Nursing school is tough, but so are you.", author: "Anonymous" },
+                    { quote: "The best way to take care of the future is to take care of the present moment.", author: "Thich Nhat Hanh" },
+                    { quote: "Success in nursing comes from dedication, not perfection.", author: "Anonymous" },
+                    { quote: "You are braver than you believe, stronger than you seem, and smarter than you think.", author: "A.A. Milne" },
+                    { quote: "Clinical skills can be taught, but compassion comes from the heart.", author: "Anonymous" },
+                    { quote: "Every small step in your nursing education is a giant leap toward saving lives.", author: "Anonymous" }
+                ];
+
+                const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
+
+                useEffect(() => {
+                    const interval = setInterval(() => {
+                        setCurrentQuoteIndex((prevIndex) => (prevIndex + 1) % nursingQuotes.length);
+                    }, 8000); // Change quote every 8 seconds
+
+                    return () => clearInterval(interval);
+                }, [nursingQuotes.length]);
+
+                const currentQuote = nursingQuotes[currentQuoteIndex];
+
+                return (
+                    <div className="bg-gradient-to-r from-blue-50 via-purple-50 to-pink-50 border border-blue-200 p-6 rounded-lg">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold text-blue-800 flex items-center">
+                                <i className="fas fa-quote-left mr-2"></i>
+                                Daily Inspiration
+                            </h3>
+                            <div className="flex space-x-2">
+                                <button 
+                                    onClick={() => setCurrentQuoteIndex((currentQuoteIndex - 1 + nursingQuotes.length) % nursingQuotes.length)}
+                                    className="text-blue-600 hover:text-blue-800 transition-colors"
+                                    title="Previous quote"
+                                >
+                                    <i className="fas fa-chevron-left"></i>
+                                </button>
+                                <button 
+                                    onClick={() => setCurrentQuoteIndex((currentQuoteIndex + 1) % nursingQuotes.length)}
+                                    className="text-blue-600 hover:text-blue-800 transition-colors"
+                                    title="Next quote"
+                                >
+                                    <i className="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div className="text-center">
+                            <blockquote className="text-lg text-gray-800 italic mb-4 min-h-16 flex items-center justify-center">
+                                "{currentQuote.quote}"
+                            </blockquote>
+                            <cite className="text-sm text-blue-600 font-medium">
+                                — {currentQuote.author}
+                            </cite>
+                        </div>
+                        <div className="flex justify-center mt-4 space-x-1">
+                            {nursingQuotes.map((_, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => setCurrentQuoteIndex(index)}
+                                    className={`w-2 h-2 rounded-full transition-colors ${
+                                        index === currentQuoteIndex ? 'bg-blue-500' : 'bg-blue-200'
+                                    }`}
+                                    title={`Quote ${index + 1}`}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                );
+            };
+
             const Dashboard = () => {
                 const urgentItems = getUrgentItems();
                 const totalClinicalHours = clinicalShifts.reduce((sum, shift) => sum + Number(shift.hours || 0), 0);
@@ -803,6 +930,46 @@
                                 </div>
                             </div>
                         )}
+
+                        {/* Achievement Badges Section */}
+                        {userAchievements.length > 0 && (
+                            <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 p-6 rounded-lg">
+                                <h3 className="text-lg font-semibold text-purple-800 mb-4 flex items-center">
+                                    <i className="fas fa-trophy mr-2"></i>
+                                    Your Achievement Badges
+                                </h3>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                                    {userAchievements.map((achievementId, index) => {
+                                        const achievement = getAchievementData(achievementId);
+                                        return (
+                                            <div
+                                                key={index}
+                                                className="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 text-center group cursor-pointer"
+                                                title={achievement.description}
+                                            >
+                                                <div className={`text-3xl mb-2 ${achievement.color} group-hover:scale-110 transition-transform duration-200`}>
+                                                    <i className={`fas ${achievement.icon}`}></i>
+                                                </div>
+                                                <div className="text-sm font-semibold text-gray-800 leading-tight">
+                                                    {achievement.title}
+                                                </div>
+                                                <div className="text-xs text-gray-600 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                                    {achievement.description}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div className="mt-4 text-center">
+                                    <span className="text-sm text-purple-700 bg-purple-100 px-3 py-1 rounded-full">
+                                        🎉 {userAchievements.length} Badge{userAchievements.length !== 1 ? 's' : ''} Earned!
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Motivational Quotes Section */}
+                        <MotivationalQuotes />
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <div className="bg-white p-6 rounded-lg card-shadow">
@@ -1752,6 +1919,299 @@
                 );
             };
 
+            const StudyScheduleGenerator = () => {
+                const [schedulePrefs, setSchedulePrefs] = useState({
+                    examDate: '',
+                    subjects: '',
+                    availableHours: 2,
+                    preferredTimes: 'morning',
+                    difficulty: 'medium',
+                    includeBreaks: true,
+                    includeOtherActivities: true,
+                    workSchedule: '',
+                    gymTime: '',
+                    chillTime: ''
+                });
+                const [generatedSchedule, setGeneratedSchedule] = useState(null);
+                const [isGenerating, setIsGenerating] = useState(false);
+
+                const generateAISchedule = async () => {
+                    setIsGenerating(true);
+                    
+                    // Simulate AI processing time
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    // Generate a realistic study schedule
+                    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                    const subjects = schedulePrefs.subjects.split(',').map(s => s.trim()).filter(s => s);
+                    const schedule = {};
+                    
+                    days.forEach((day, index) => {
+                        schedule[day] = [];
+                        
+                        // Add work schedule if specified
+                        if (schedulePrefs.workSchedule) {
+                            schedule[day].push({
+                                time: schedulePrefs.workSchedule,
+                                activity: 'Work',
+                                type: 'work',
+                                color: 'bg-gray-100 text-gray-800'
+                            });
+                        }
+                        
+                        // Add study sessions
+                        const studySubject = subjects[index % subjects.length] || 'General Study';
+                        const studyTime = schedulePrefs.preferredTimes === 'morning' ? '9:00 AM - 11:00 AM' : 
+                                         schedulePrefs.preferredTimes === 'afternoon' ? '2:00 PM - 4:00 PM' : '7:00 PM - 9:00 PM';
+                        
+                        schedule[day].push({
+                            time: studyTime,
+                            activity: `Study: ${studySubject}`,
+                            type: 'study',
+                            color: 'bg-blue-100 text-blue-800'
+                        });
+                        
+                        // Add gym time if specified
+                        if (schedulePrefs.gymTime) {
+                            schedule[day].push({
+                                time: schedulePrefs.gymTime,
+                                activity: 'Gym/Exercise',
+                                type: 'gym',
+                                color: 'bg-green-100 text-green-800'
+                            });
+                        }
+                        
+                        // Add chill time if specified
+                        if (schedulePrefs.chillTime) {
+                            schedule[day].push({
+                                time: schedulePrefs.chillTime,
+                                activity: 'Relaxation/Free Time',
+                                type: 'chill',
+                                color: 'bg-purple-100 text-purple-800'
+                            });
+                        }
+                        
+                        // Add breaks if enabled
+                        if (schedulePrefs.includeBreaks) {
+                            schedule[day].push({
+                                time: '12:00 PM - 1:00 PM',
+                                activity: 'Lunch Break',
+                                type: 'break',
+                                color: 'bg-yellow-100 text-yellow-800'
+                            });
+                        }
+                    });
+                    
+                    setGeneratedSchedule(schedule);
+                    setIsGenerating(false);
+                };
+
+                const saveScheduleToCalendar = async () => {
+                    if (!generatedSchedule) return;
+                    
+                    const today = new Date();
+                    const startOfWeek = new Date(today.setDate(today.getDate() - today.getDay()));
+                    
+                    Object.entries(generatedSchedule).forEach(async ([day, activities], dayIndex) => {
+                        const scheduleDate = new Date(startOfWeek);
+                        scheduleDate.setDate(startOfWeek.getDate() + dayIndex);
+                        
+                        for (const activity of activities) {
+                            if (activity.type === 'study') {
+                                await addAssignmentToDB({
+                                    title: activity.activity,
+                                    course: 'Generated Schedule',
+                                    type: 'study-session',
+                                    dueDate: scheduleDate.toISOString().split('T')[0],
+                                    priority: 'Medium',
+                                    description: `Generated by AI Study Planner - ${activity.time}`
+                                });
+                            }
+                        }
+                    });
+                    
+                    await loadAllData();
+                    alert('Schedule saved to calendar! Check your Calendar tab.');
+                };
+
+                return (
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Upcoming Exam Date
+                                </label>
+                                <input
+                                    type="date"
+                                    value={schedulePrefs.examDate}
+                                    onChange={(e) => setSchedulePrefs({...schedulePrefs, examDate: e.target.value})}
+                                    className="w-full p-3 border rounded"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Subjects to Study (comma separated)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={schedulePrefs.subjects}
+                                    onChange={(e) => setSchedulePrefs({...schedulePrefs, subjects: e.target.value})}
+                                    placeholder="Anatomy, Pharmacology, Medical-Surgical"
+                                    className="w-full p-3 border rounded"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Available Study Hours Per Day
+                                </label>
+                                <select
+                                    value={schedulePrefs.availableHours}
+                                    onChange={(e) => setSchedulePrefs({...schedulePrefs, availableHours: parseInt(e.target.value)})}
+                                    className="w-full p-3 border rounded"
+                                >
+                                    <option value={1}>1 hour</option>
+                                    <option value={2}>2 hours</option>
+                                    <option value={3}>3 hours</option>
+                                    <option value={4}>4 hours</option>
+                                    <option value={5}>5+ hours</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Preferred Study Time
+                                </label>
+                                <select
+                                    value={schedulePrefs.preferredTimes}
+                                    onChange={(e) => setSchedulePrefs({...schedulePrefs, preferredTimes: e.target.value})}
+                                    className="w-full p-3 border rounded"
+                                >
+                                    <option value="morning">Morning (9 AM - 12 PM)</option>
+                                    <option value="afternoon">Afternoon (1 PM - 5 PM)</option>
+                                    <option value="evening">Evening (6 PM - 10 PM)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Additional Activities Section */}
+                        <div className="border-t pt-4">
+                            <h4 className="text-lg font-semibold mb-3 flex items-center">
+                                <i className="fas fa-plus-circle mr-2 text-green-600"></i>
+                                Include Other Activities
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Work Schedule
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={schedulePrefs.workSchedule}
+                                        onChange={(e) => setSchedulePrefs({...schedulePrefs, workSchedule: e.target.value})}
+                                        placeholder="e.g., 8:00 AM - 4:00 PM"
+                                        className="w-full p-3 border rounded"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Gym/Exercise Time
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={schedulePrefs.gymTime}
+                                        onChange={(e) => setSchedulePrefs({...schedulePrefs, gymTime: e.target.value})}
+                                        placeholder="e.g., 6:00 AM - 7:00 AM"
+                                        className="w-full p-3 border rounded"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Relaxation/Free Time
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={schedulePrefs.chillTime}
+                                        onChange={(e) => setSchedulePrefs({...schedulePrefs, chillTime: e.target.value})}
+                                        placeholder="e.g., 8:00 PM - 10:00 PM"
+                                        className="w-full p-3 border rounded"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-4">
+                            <button
+                                onClick={generateAISchedule}
+                                disabled={isGenerating || !schedulePrefs.subjects}
+                                className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 px-6 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                            >
+                                {isGenerating ? (
+                                    <>
+                                        <i className="fas fa-spinner fa-spin mr-2"></i>
+                                        Generating Schedule...
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="fas fa-magic mr-2"></i>
+                                        Generate Weekly Schedule
+                                    </>
+                                )}
+                            </button>
+                            {generatedSchedule && (
+                                <button
+                                    onClick={saveScheduleToCalendar}
+                                    className="bg-green-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-700 flex items-center"
+                                >
+                                    <i className="fas fa-save mr-2"></i>
+                                    Save to Calendar
+                                </button>
+                            )}
+                        </div>
+
+                        {generatedSchedule && (
+                            <div className="mt-6 bg-gray-50 p-6 rounded-lg">
+                                <h4 className="text-lg font-semibold mb-4 flex items-center">
+                                    <i className="fas fa-calendar-alt mr-2 text-blue-600"></i>
+                                    Your Generated Weekly Schedule
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                    {Object.entries(generatedSchedule).map(([day, activities]) => (
+                                        <div key={day} className="bg-white p-4 rounded-lg shadow">
+                                            <h5 className="font-semibold text-gray-900 mb-3 text-center border-b pb-2">
+                                                {day}
+                                            </h5>
+                                            <div className="space-y-2">
+                                                {activities.map((activity, index) => (
+                                                    <div
+                                                        key={index}
+                                                        className={`p-2 rounded text-xs ${activity.color}`}
+                                                    >
+                                                        <div className="font-medium">{activity.time}</div>
+                                                        <div>{activity.activity}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                
+                                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                                    <div className="flex items-center text-blue-800 mb-2">
+                                        <i className="fas fa-lightbulb mr-2"></i>
+                                        <span className="font-semibold">AI Study Tips:</span>
+                                    </div>
+                                    <ul className="text-sm text-blue-700 space-y-1">
+                                        <li>• Review notes 15 minutes before each study session</li>
+                                        <li>• Take 5-minute breaks every 25 minutes (Pomodoro technique)</li>
+                                        <li>• Use active recall and spaced repetition for better retention</li>
+                                        <li>• Study the most challenging subjects when you're most alert</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
             const StudyPlanner = () => {
                 const [studyTimer, setStudyTimer] = useState(25 * 60);
                 const [isRunning, setIsRunning] = useState(false);
@@ -1938,6 +2398,15 @@
                                     No flashcards yet. Add your first flashcard above!
                                 </div>
                             )}
+                        </div>
+
+                        {/* AI Study Schedule Generator */}
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <h3 className="text-xl font-semibold mb-4 flex items-center">
+                                <i className="fas fa-robot mr-2 text-purple-600"></i>
+                                AI Study Schedule Generator
+                            </h3>
+                            <StudyScheduleGenerator />
                         </div>
                     </div>
                 );

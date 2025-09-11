@@ -445,7 +445,7 @@ def initialize_data():
 @app.route('/')
 def index():
     """Serve the main application HTML file"""
-    with open('database_enabled_frontend.html', 'r') as f:
+    with open('database_enabled_frontend.html', 'r', encoding='utf-8') as f:
         return f.read()
 
 @app.route('/favicon_io/<path:filename>')
