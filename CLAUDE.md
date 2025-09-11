@@ -1,33 +1,23 @@
+i like to implement these changes: 
 
-Navigation Fixed
-The Calendar and Grades tabs
-Complete Database Solution
-Backend (Python Flask + SQLite)
+Dark/Light Mode Toggle - Many students study late hours
 
-Full API with 30+ endpoints for all data operations
-SQLite database with 7 tables (assignments, clinical_shifts, requirements, goals, grades, flashcards, settings)
-CORS enabled for cross-browser compatibility
-Data validation and error handling
-Backup/export functionality
+Drag & Drop Calendar - Ability to reschedule items by dragging
 
-Frontend (Database-Connected)
+Quick Add Widget - Floating action button for rapid entry
 
-Real-time sync with database
-Error handling with user-friendly messages
-Loading states and connection status
-Cross-browser data persistence
+rapid entry for what 
 
-give me these file properly to complete this web app task
-📁 Setup Files Created
+this could be cool: Study Schedule Generator - AI-suggested study plans based on upcoming exams, lets explore ollama doing this with some small model so be efficent 
 
-Backend server (app.py) - Flask API with SQLite
-Frontend (database_enabled_frontend.html) - React app with database connectivity
+have abutton to make shceudle for week
 
-we have database.py that should create the database we will use 
+have her be able to put in other things for her schedule as well like work, gym, chill, etc 
 
-fix up database_enabled_frontend.html to work properly i think its incomplete right now
+this is dope: Stress Level Tracker - Daily mood/stress logging with trends
 
-set up datbase, create app.py
+this could be fun: Achievement Badges - Gamification for completed milestones
 
-ensure favicons in favicon_io folder are linked 
+add this: Motivational Quotes - Nursing-specific inspiration rotation
 
+most importantly ensure this is mobile friendly too 

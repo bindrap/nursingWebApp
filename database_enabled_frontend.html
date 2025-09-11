@@ -23,6 +23,104 @@
         .progress-bar {
             transition: width 0.3s ease-in-out;
         }
+        .theme-transition {
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+        }
+        
+        /* Dark mode styles */
+        .dark {
+            color-scheme: dark;
+        }
+        
+        .dark body {
+            background-color: #1a202c;
+        }
+        
+        .dark .bg-gray-50 {
+            background-color: #1a202c !important;
+        }
+        
+        .dark .bg-white {
+            background-color: #2d3748 !important;
+            color: #e2e8f0 !important;
+        }
+        
+        .dark .bg-gray-100 {
+            background-color: #4a5568 !important;
+        }
+        
+        .dark .text-gray-900 {
+            color: #e2e8f0 !important;
+        }
+        
+        .dark .text-gray-800 {
+            color: #e2e8f0 !important;
+        }
+        
+        .dark .text-gray-700 {
+            color: #cbd5e0 !important;
+        }
+        
+        .dark .text-gray-600 {
+            color: #a0aec0 !important;
+        }
+        
+        .dark .text-gray-500 {
+            color: #718096 !important;
+        }
+        
+        .dark .border-gray-200 {
+            border-color: #4a5568 !important;
+        }
+        
+        .dark .border-b {
+            border-color: #4a5568 !important;
+        }
+        
+        .dark .border-t {
+            border-color: #4a5568 !important;
+        }
+        
+        .dark input, .dark select, .dark textarea {
+            background-color: #4a5568 !important;
+            color: #e2e8f0 !important;
+            border-color: #718096 !important;
+        }
+        
+        .dark input:focus, .dark select:focus, .dark textarea:focus {
+            border-color: #667eea !important;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+        }
+        
+        .dark .divide-y > * {
+            border-color: #4a5568 !important;
+        }
+        
+        .dark .card-shadow {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2) !important;
+        }
+        
+        /* Drag and Drop styles */
+        .drop-target {
+            background-color: #e0e7ff !important;
+            border-color: #6366f1 !important;
+            border-style: dashed !important;
+        }
+        
+        .dark .drop-target {
+            background-color: #312e81 !important;
+            border-color: #8b5cf6 !important;
+        }
+        
+        [draggable="true"]:hover {
+            transform: translateY(-1px);
+            transition: transform 0.2s ease;
+        }
+        
+        .dragging {
+            opacity: 0.5;
+            transform: rotate(5deg);
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -30,6 +128,40 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
+
+        // Theme Context
+        const ThemeContext = React.createContext();
+        
+        const ThemeProvider = ({ children }) => {
+            const [isDark, setIsDark] = useState(() => {
+                const saved = localStorage.getItem('nursing-app-theme');
+                return saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            });
+
+            const toggleTheme = () => {
+                const newTheme = !isDark;
+                setIsDark(newTheme);
+                localStorage.setItem('nursing-app-theme', newTheme ? 'dark' : 'light');
+            };
+
+            useEffect(() => {
+                document.documentElement.classList.toggle('dark', isDark);
+            }, [isDark]);
+
+            return (
+                <ThemeContext.Provider value={{ isDark, toggleTheme }}>
+                    {children}
+                </ThemeContext.Provider>
+            );
+        };
+
+        const useTheme = () => {
+            const context = React.useContext(ThemeContext);
+            if (!context) {
+                throw new Error('useTheme must be used within a ThemeProvider');
+            }
+            return context;
+        };
 
         // API Configuration
         const API_BASE = 'http://localhost:5000/api';
@@ -123,9 +255,11 @@
             const [goals, setGoals] = useState([]);
             const [grades, setGrades] = useState([]);
             const [flashcards, setFlashcards] = useState([]);
+            const [stressLogs, setStressLogs] = useState([]);
             const [currentSemester, setCurrentSemester] = useState(1);
             const [loading, setLoading] = useState(true);
             const [error, setError] = useState(null);
+            const [showQuickAdd, setShowQuickAdd] = useState(false);
 
             // Load data from database on mount
             useEffect(() => {
@@ -148,6 +282,7 @@
                         goalsData,
                         gradesData,
                         flashcardsData,
+                        stressLogsData,
                         settingsData
                     ] = await Promise.all([
                         api.get('/assignments'),
@@ -156,6 +291,7 @@
                         api.get('/goals'),
                         api.get('/grades'),
                         api.get('/flashcards'),
+                        api.get('/stress-logs'),
                         api.get('/settings')
                     ]);
 
@@ -214,6 +350,16 @@
                         id: f.id,
                         question: f.question,
                         answer: f.answer
+                    })));
+
+                    setStressLogs(stressLogsData.map(s => ({
+                        id: s.id,
+                        date: s.date,
+                        stressLevel: s.stress_level,
+                        mood: s.mood,
+                        notes: s.notes,
+                        studyHours: s.study_hours,
+                        sleepHours: s.sleep_hours
                     })));
 
                     // Set current semester from settings
@@ -336,6 +482,165 @@
                 }
             };
 
+            const addStressLogToDB = async (stressLog) => {
+                try {
+                    await api.post('/stress-logs', stressLog);
+                    await loadAllData();
+                } catch (err) {
+                    console.error('Error adding stress log:', err);
+                }
+            };
+
+            const deleteStressLogFromDB = async (id) => {
+                try {
+                    await api.delete(`/stress-logs/${id}`);
+                    await loadAllData();
+                } catch (err) {
+                    console.error('Error deleting stress log:', err);
+                }
+            };
+
+            // Achievement System
+            const checkAchievements = () => {
+                const achievements = [];
+                
+                // Assignment achievements
+                const completedAssignments = assignments.filter(a => a.completed).length;
+                if (completedAssignments >= 1) achievements.push('first-assignment');
+                if (completedAssignments >= 10) achievements.push('assignment-master');
+                if (completedAssignments >= 25) achievements.push('assignment-legend');
+                
+                // Clinical achievements
+                const totalClinicalHours = clinicalShifts.reduce((sum, shift) => sum + Number(shift.hours || 0), 0);
+                if (totalClinicalHours >= 10) achievements.push('first-clinical');
+                if (totalClinicalHours >= 50) achievements.push('clinical-rookie');
+                if (totalClinicalHours >= 100) achievements.push('clinical-veteran');
+                if (totalClinicalHours >= 200) achievements.push('clinical-master');
+                
+                // Study achievements
+                if (flashcards.length >= 10) achievements.push('study-starter');
+                if (flashcards.length >= 50) achievements.push('flashcard-master');
+                
+                // Grade achievements
+                const highGrades = grades.filter(g => g.percentage >= 90).length;
+                if (highGrades >= 1) achievements.push('high-achiever');
+                if (highGrades >= 5) achievements.push('excellence-streak');
+                
+                // Wellness achievements
+                const recentStressLogs = stressLogs.filter(log => {
+                    const logDate = new Date(log.date);
+                    const sevenDaysAgo = new Date();
+                    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                    return logDate >= sevenDaysAgo;
+                }).length;
+                
+                if (recentStressLogs >= 3) achievements.push('wellness-warrior');
+                if (recentStressLogs >= 7) achievements.push('wellness-champion');
+                
+                // Goal achievements
+                const completedGoals = goals.filter(g => g.completed).length;
+                if (completedGoals >= 1) achievements.push('goal-getter');
+                if (completedGoals >= 5) achievements.push('achiever');
+                
+                return achievements;
+            };
+
+            const getAchievementData = (id) => {
+                const achievements = {
+                    'first-assignment': { 
+                        title: 'First Steps', 
+                        description: 'Complete your first assignment', 
+                        icon: 'fa-baby-carriage', 
+                        color: 'text-green-500' 
+                    },
+                    'assignment-master': { 
+                        title: 'Assignment Master', 
+                        description: 'Complete 10 assignments', 
+                        icon: 'fa-star', 
+                        color: 'text-blue-500' 
+                    },
+                    'assignment-legend': { 
+                        title: 'Assignment Legend', 
+                        description: 'Complete 25 assignments', 
+                        icon: 'fa-crown', 
+                        color: 'text-purple-500' 
+                    },
+                    'first-clinical': { 
+                        title: 'Clinical Beginner', 
+                        description: 'Complete 10 clinical hours', 
+                        icon: 'fa-user-md', 
+                        color: 'text-green-500' 
+                    },
+                    'clinical-rookie': { 
+                        title: 'Clinical Rookie', 
+                        description: 'Complete 50 clinical hours', 
+                        icon: 'fa-stethoscope', 
+                        color: 'text-blue-500' 
+                    },
+                    'clinical-veteran': { 
+                        title: 'Clinical Veteran', 
+                        description: 'Complete 100 clinical hours', 
+                        icon: 'fa-heartbeat', 
+                        color: 'text-purple-500' 
+                    },
+                    'clinical-master': { 
+                        title: 'Clinical Master', 
+                        description: 'Complete 200 clinical hours', 
+                        icon: 'fa-award', 
+                        color: 'text-gold-500' 
+                    },
+                    'study-starter': { 
+                        title: 'Study Starter', 
+                        description: 'Create 10 flashcards', 
+                        icon: 'fa-brain', 
+                        color: 'text-pink-500' 
+                    },
+                    'flashcard-master': { 
+                        title: 'Flashcard Master', 
+                        description: 'Create 50 flashcards', 
+                        icon: 'fa-graduation-cap', 
+                        color: 'text-indigo-500' 
+                    },
+                    'high-achiever': { 
+                        title: 'High Achiever', 
+                        description: 'Score 90%+ on an assessment', 
+                        icon: 'fa-trophy', 
+                        color: 'text-yellow-500' 
+                    },
+                    'excellence-streak': { 
+                        title: 'Excellence Streak', 
+                        description: 'Score 90%+ on 5 assessments', 
+                        icon: 'fa-fire', 
+                        color: 'text-red-500' 
+                    },
+                    'wellness-warrior': { 
+                        title: 'Wellness Warrior', 
+                        description: 'Log wellness for 3 days this week', 
+                        icon: 'fa-heart', 
+                        color: 'text-pink-500' 
+                    },
+                    'wellness-champion': { 
+                        title: 'Wellness Champion', 
+                        description: 'Log wellness every day this week', 
+                        icon: 'fa-gem', 
+                        color: 'text-purple-500' 
+                    },
+                    'goal-getter': { 
+                        title: 'Goal Getter', 
+                        description: 'Complete your first goal', 
+                        icon: 'fa-bullseye', 
+                        color: 'text-green-500' 
+                    },
+                    'achiever': { 
+                        title: 'Achiever', 
+                        description: 'Complete 5 goals', 
+                        icon: 'fa-medal', 
+                        color: 'text-blue-500' 
+                    }
+                };
+                return achievements[id] || { title: 'Unknown', description: '', icon: 'fa-question', color: 'text-gray-500' };
+            };
+
             // Utility functions
             const getDaysUntil = (date) => {
                 const today = new Date();
@@ -415,6 +720,7 @@
                 const totalClinicalHours = clinicalShifts.reduce((sum, shift) => sum + Number(shift.hours || 0), 0);
                 const completedAssignments = assignments.filter(a => a.completed).length;
                 const upcomingAssignments = assignments.filter(a => !a.completed).length;
+                const userAchievements = checkAchievements();
 
                 return (
                     <div className="space-y-6">
@@ -887,6 +1193,7 @@
             const Calendar = () => {
                 const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
                 const [viewMode, setViewMode] = useState('month');
+                const [draggedItem, setDraggedItem] = useState(null);
 
                 const getAllEvents = () => {
                     const events = [];
@@ -989,6 +1296,49 @@
                 const currentMonth = monthNames[new Date().getMonth()];
                 const currentYear = new Date().getFullYear();
 
+                // Drag and Drop handlers
+                const handleDragStart = (e, event) => {
+                    setDraggedItem(event);
+                    e.dataTransfer.effectAllowed = 'move';
+                };
+
+                const handleDragOver = (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                };
+
+                const handleDrop = async (e, targetDate) => {
+                    e.preventDefault();
+                    if (!draggedItem || draggedItem.date === targetDate) return;
+
+                    try {
+                        if (draggedItem.category === 'assignment') {
+                            const assignmentId = draggedItem.id.replace('assignment-', '');
+                            const assignment = assignments.find(a => a.id == assignmentId);
+                            if (assignment) {
+                                await updateAssignmentInDB(assignment.id, {
+                                    ...assignment,
+                                    dueDate: targetDate
+                                });
+                            }
+                        } else if (draggedItem.category === 'clinical') {
+                            const shiftId = draggedItem.id.replace('clinical-', '');
+                            const shift = clinicalShifts.find(s => s.id == shiftId);
+                            if (shift) {
+                                await api.put(`/clinical-shifts/${shift.id}`, {
+                                    ...shift,
+                                    date: targetDate
+                                });
+                                await loadAllData();
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Error moving event:', err);
+                    }
+                    
+                    setDraggedItem(null);
+                };
+
                 return (
                     <div className="space-y-6">
                         <div className="bg-white p-6 rounded-lg card-shadow">
@@ -1033,12 +1383,16 @@
                                             <div
                                                 key={index}
                                                 onClick={() => setSelectedDate(day.dateStr)}
-                                                className={`p-2 min-h-20 border cursor-pointer hover:bg-gray-50 ${
+                                                onDragOver={handleDragOver}
+                                                onDrop={(e) => handleDrop(e, day.dateStr)}
+                                                className={`p-2 min-h-20 border cursor-pointer hover:bg-gray-50 transition-colors ${
                                                     !day.isCurrentMonth ? 'text-gray-400 bg-gray-50' : ''
                                                 } ${
                                                     day.isToday ? 'bg-purple-100 border-purple-500' : 'border-gray-200'
                                                 } ${
                                                     selectedDate === day.dateStr ? 'ring-2 ring-purple-500' : ''
+                                                } ${
+                                                    draggedItem ? 'drop-target' : ''
                                                 }`}
                                             >
                                                 <div className="font-medium text-sm">{day.date.getDate()}</div>
@@ -1046,8 +1400,17 @@
                                                     {day.events.slice(0, 2).map(event => (
                                                         <div
                                                             key={event.id}
-                                                            className={`text-xs p-1 rounded border ${getEventColor(event.category, event.type)}`}
+                                                            draggable={event.category === 'assignment' || event.category === 'clinical'}
+                                                            onDragStart={(e) => handleDragStart(e, event)}
+                                                            className={`text-xs p-1 rounded border ${getEventColor(event.category, event.type)} ${
+                                                                (event.category === 'assignment' || event.category === 'clinical') ? 
+                                                                'cursor-move hover:opacity-80' : ''
+                                                            }`}
+                                                            title={event.event}
                                                         >
+                                                            {(event.category === 'assignment' || event.category === 'clinical') && 
+                                                                <i className="fas fa-grip-lines text-xs opacity-60 mr-1"></i>
+                                                            }
                                                             {event.event.length > 15 ? event.event.substring(0, 15) + '...' : event.event}
                                                         </div>
                                                     ))}
@@ -1911,7 +2274,8 @@
                 { id: 'grades', label: 'Grades', icon: 'fas fa-chart-line' },
                 { id: 'requirements', label: 'Requirements', icon: 'fas fa-clipboard-check' },
                 { id: 'study', label: 'Study', icon: 'fas fa-graduation-cap' },
-                { id: 'goals', label: 'Goals', icon: 'fas fa-bullseye' }
+                { id: 'goals', label: 'Goals', icon: 'fas fa-bullseye' },
+                { id: 'wellness', label: 'Wellness', icon: 'fas fa-heart' }
             ];
 
             const renderActiveTab = () => {
@@ -1924,13 +2288,512 @@
                     case 'requirements': return <RequirementsTracker />;
                     case 'study': return <StudyPlanner />;
                     case 'goals': return <GoalsTracker />;
+                    case 'wellness': return <WellnessTracker />;
                     default: return <Dashboard />;
                 }
             };
 
+            // Wellness Tracker Component
+            const WellnessTracker = () => {
+                const [todayLog, setTodayLog] = useState(null);
+                const [newLog, setNewLog] = useState({
+                    stressLevel: 3,
+                    mood: 'neutral',
+                    notes: '',
+                    studyHours: '',
+                    sleepHours: ''
+                });
+                const [showWeekView, setShowWeekView] = useState(false);
+
+                const today = new Date().toISOString().split('T')[0];
+
+                useEffect(() => {
+                    const existing = stressLogs.find(log => log.date === today);
+                    setTodayLog(existing || null);
+                    if (existing) {
+                        setNewLog({
+                            stressLevel: existing.stressLevel,
+                            mood: existing.mood || 'neutral',
+                            notes: existing.notes || '',
+                            studyHours: existing.studyHours || '',
+                            sleepHours: existing.sleepHours || ''
+                        });
+                    }
+                }, [stressLogs, today]);
+
+                const logToday = async () => {
+                    try {
+                        await addStressLogToDB({
+                            date: today,
+                            stress_level: newLog.stressLevel,
+                            mood: newLog.mood,
+                            notes: newLog.notes,
+                            study_hours: newLog.studyHours ? parseFloat(newLog.studyHours) : null,
+                            sleep_hours: newLog.sleepHours ? parseFloat(newLog.sleepHours) : null
+                        });
+                    } catch (error) {
+                        console.error('Error logging today:', error);
+                    }
+                };
+
+                const getStressColor = (level) => {
+                    if (level <= 2) return 'text-green-600';
+                    if (level <= 3) return 'text-yellow-600';
+                    if (level <= 4) return 'text-orange-600';
+                    return 'text-red-600';
+                };
+
+                const getMoodEmoji = (mood) => {
+                    switch (mood) {
+                        case 'excellent': return '😄';
+                        case 'good': return '😊';
+                        case 'neutral': return '😐';
+                        case 'tired': return '😴';
+                        case 'stressed': return '😰';
+                        case 'overwhelmed': return '😵';
+                        default: return '😐';
+                    }
+                };
+
+                const getWeekData = () => {
+                    const weekDays = [];
+                    const startDate = new Date();
+                    startDate.setDate(startDate.getDate() - 6);
+                    
+                    for (let i = 0; i < 7; i++) {
+                        const date = new Date(startDate);
+                        date.setDate(startDate.getDate() + i);
+                        const dateStr = date.toISOString().split('T')[0];
+                        const log = stressLogs.find(l => l.date === dateStr);
+                        weekDays.push({
+                            date: dateStr,
+                            dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
+                            log
+                        });
+                    }
+                    return weekDays;
+                };
+
+                const weekData = getWeekData();
+
+                return (
+                    <div className="space-y-6">
+                        {/* Today's Log */}
+                        <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-lg card-shadow theme-transition">
+                            <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4">
+                                <h3 className="text-xl font-semibold mb-2 md:mb-0">Today's Wellness Check</h3>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">{new Date().toLocaleDateString()}</span>
+                            </div>
+
+                            <div className="space-y-4">
+                                {/* Stress Level */}
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">
+                                        Stress Level: <span className={`font-bold ${getStressColor(newLog.stressLevel)}`}>{newLog.stressLevel}/5</span>
+                                    </label>
+                                    <div className="flex items-center space-x-2">
+                                        <span className="text-sm">Low</span>
+                                        <input
+                                            type="range"
+                                            min="1"
+                                            max="5"
+                                            value={newLog.stressLevel}
+                                            onChange={(e) => setNewLog({...newLog, stressLevel: parseInt(e.target.value)})}
+                                            className="flex-1"
+                                        />
+                                        <span className="text-sm">High</span>
+                                    </div>
+                                </div>
+
+                                {/* Mood */}
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Mood {getMoodEmoji(newLog.mood)}</label>
+                                    <select
+                                        value={newLog.mood}
+                                        onChange={(e) => setNewLog({...newLog, mood: e.target.value})}
+                                        className="w-full p-2 border rounded theme-transition"
+                                    >
+                                        <option value="excellent">😄 Excellent</option>
+                                        <option value="good">😊 Good</option>
+                                        <option value="neutral">😐 Neutral</option>
+                                        <option value="tired">😴 Tired</option>
+                                        <option value="stressed">😰 Stressed</option>
+                                        <option value="overwhelmed">😵 Overwhelmed</option>
+                                    </select>
+                                </div>
+
+                                {/* Study and Sleep Hours */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium mb-2">Study Hours</label>
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            placeholder="0"
+                                            value={newLog.studyHours}
+                                            onChange={(e) => setNewLog({...newLog, studyHours: e.target.value})}
+                                            className="w-full p-2 border rounded theme-transition"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-2">Sleep Hours</label>
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            placeholder="0"
+                                            value={newLog.sleepHours}
+                                            onChange={(e) => setNewLog({...newLog, sleepHours: e.target.value})}
+                                            className="w-full p-2 border rounded theme-transition"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Notes */}
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Notes (optional)</label>
+                                    <textarea
+                                        placeholder="How are you feeling today? Any specific stressors or accomplishments?"
+                                        value={newLog.notes}
+                                        onChange={(e) => setNewLog({...newLog, notes: e.target.value})}
+                                        className="w-full p-2 border rounded theme-transition resize-none"
+                                        rows="3"
+                                    />
+                                </div>
+
+                                {/* Save Button */}
+                                <button
+                                    onClick={logToday}
+                                    className="w-full bg-gradient-to-r from-pink-500 to-purple-600 text-white py-2 px-4 rounded font-medium hover:from-pink-600 hover:to-purple-700 transition-all"
+                                >
+                                    <i className="fas fa-heart mr-2"></i>
+                                    {todayLog ? 'Update Today\'s Log' : 'Log Today\'s Wellness'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Week View Toggle */}
+                        <div className="flex justify-center">
+                            <button
+                                onClick={() => setShowWeekView(!showWeekView)}
+                                className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                            >
+                                <i className={`fas ${showWeekView ? 'fa-chevron-up' : 'fa-chevron-down'} mr-2`}></i>
+                                {showWeekView ? 'Hide' : 'Show'} Week Trend
+                            </button>
+                        </div>
+
+                        {/* Week Trend */}
+                        {showWeekView && (
+                            <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-lg card-shadow theme-transition">
+                                <h3 className="text-lg font-semibold mb-4">7-Day Wellness Trend</h3>
+                                
+                                <div className="grid grid-cols-7 gap-2 mb-6">
+                                    {weekData.map((day, index) => (
+                                        <div key={index} className="text-center">
+                                            <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">{day.dayName}</div>
+                                            <div className={`w-full h-12 rounded flex items-center justify-center text-sm font-bold ${
+                                                day.log ? 
+                                                `${getStressColor(day.log.stressLevel)} border-2 border-current bg-opacity-10 ${
+                                                    day.log.stressLevel <= 2 ? 'bg-green-100 dark:bg-green-900' :
+                                                    day.log.stressLevel <= 3 ? 'bg-yellow-100 dark:bg-yellow-900' :
+                                                    day.log.stressLevel <= 4 ? 'bg-orange-100 dark:bg-orange-900' :
+                                                    'bg-red-100 dark:bg-red-900'
+                                                }` :
+                                                'bg-gray-100 dark:bg-gray-700 text-gray-400'
+                                            }`}>
+                                                {day.log ? (
+                                                    <div className="text-center">
+                                                        <div>{getMoodEmoji(day.log.mood)}</div>
+                                                        <div className="text-xs">{day.log.stressLevel}/5</div>
+                                                    </div>
+                                                ) : (
+                                                    <i className="fas fa-minus"></i>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Recent Logs */}
+                                {stressLogs.length > 0 && (
+                                    <div className="space-y-3">
+                                        <h4 className="font-semibold">Recent Logs</h4>
+                                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                                            {stressLogs.slice(0, 5).map(log => (
+                                                <div key={log.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                                                    <div className="flex items-center space-x-3">
+                                                        <span className="text-sm font-medium">{log.date}</span>
+                                                        <span className="text-lg">{getMoodEmoji(log.mood)}</span>
+                                                        <span className={`text-sm ${getStressColor(log.stressLevel)}`}>
+                                                            Stress: {log.stressLevel}/5
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => deleteStressLogFromDB(log.id)}
+                                                        className="text-red-500 hover:text-red-700 text-sm"
+                                                    >
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Wellness Tips */}
+                        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900 dark:to-purple-900 p-4 md:p-6 rounded-lg">
+                            <h3 className="text-lg font-semibold mb-3 text-blue-800 dark:text-blue-200">
+                                <i className="fas fa-lightbulb mr-2"></i>
+                                Wellness Tips for Nursing Students
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                <div className="space-y-2">
+                                    <div className="flex items-start">
+                                        <i className="fas fa-moon text-indigo-600 mt-1 mr-2"></i>
+                                        <span>Aim for 7-9 hours of sleep for optimal cognitive function</span>
+                                    </div>
+                                    <div className="flex items-start">
+                                        <i className="fas fa-walking text-green-600 mt-1 mr-2"></i>
+                                        <span>Take short breaks every hour during study sessions</span>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="flex items-start">
+                                        <i className="fas fa-users text-pink-600 mt-1 mr-2"></i>
+                                        <span>Connect with classmates for peer support</span>
+                                    </div>
+                                    <div className="flex items-start">
+                                        <i className="fas fa-spa text-purple-600 mt-1 mr-2"></i>
+                                        <span>Practice deep breathing or meditation when stressed</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // Theme Toggle Component
+            const ThemeToggle = () => {
+                const { isDark, toggleTheme } = useTheme();
+                
+                return (
+                    <button
+                        onClick={toggleTheme}
+                        className="p-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                        title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+                    >
+                        <i className={`fas ${isDark ? 'fa-sun' : 'fa-moon'} text-lg ${isDark ? 'text-yellow-500' : 'text-gray-600'}`}></i>
+                    </button>
+                );
+            };
+
+            // Quick Add Widget Component
+            const QuickAddWidget = () => {
+                const [quickAddType, setQuickAddType] = useState('assignment');
+                const [quickAddData, setQuickAddData] = useState({
+                    title: '',
+                    course: '',
+                    dueDate: new Date().toISOString().split('T')[0],
+                    location: '',
+                    hours: '',
+                    category: 'academic'
+                });
+
+                const resetForm = () => {
+                    setQuickAddData({
+                        title: '',
+                        course: '',
+                        dueDate: new Date().toISOString().split('T')[0],
+                        location: '',
+                        hours: '',
+                        category: 'academic'
+                    });
+                };
+
+                const handleQuickAdd = async () => {
+                    if (!quickAddData.title) return;
+
+                    try {
+                        if (quickAddType === 'assignment') {
+                            if (!quickAddData.course) return;
+                            await addAssignmentToDB({
+                                title: quickAddData.title,
+                                course: quickAddData.course,
+                                dueDate: quickAddData.dueDate,
+                                weight: '',
+                                status: 'not-started'
+                            });
+                        } else if (quickAddType === 'clinical') {
+                            if (!quickAddData.location || !quickAddData.hours) return;
+                            await addClinicalShiftToDB({
+                                date: quickAddData.dueDate,
+                                location: quickAddData.location,
+                                unit: '',
+                                hours: quickAddData.hours
+                            });
+                        } else if (quickAddType === 'goal') {
+                            await addGoalToDB({
+                                title: quickAddData.title,
+                                description: '',
+                                targetDate: quickAddData.dueDate,
+                                category: quickAddData.category
+                            });
+                        }
+                        
+                        resetForm();
+                        setShowQuickAdd(false);
+                    } catch (error) {
+                        console.error('Error in quick add:', error);
+                    }
+                };
+
+                if (!showQuickAdd) return null;
+
+                return (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end md:items-center justify-center z-50 p-4 md:p-0">
+                        <div className="bg-white dark:bg-gray-800 rounded-t-lg md:rounded-lg p-4 md:p-6 w-full max-w-md theme-transition max-h-96 md:max-h-none overflow-y-auto">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-semibold">Quick Add</h3>
+                                <button
+                                    onClick={() => setShowQuickAdd(false)}
+                                    className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                                >
+                                    <i className="fas fa-times text-xl"></i>
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="flex space-x-2">
+                                    <button
+                                        onClick={() => setQuickAddType('assignment')}
+                                        className={`px-3 py-2 rounded text-sm ${
+                                            quickAddType === 'assignment' 
+                                                ? 'bg-blue-500 text-white' 
+                                                : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+                                        }`}
+                                    >
+                                        Assignment
+                                    </button>
+                                    <button
+                                        onClick={() => setQuickAddType('clinical')}
+                                        className={`px-3 py-2 rounded text-sm ${
+                                            quickAddType === 'clinical' 
+                                                ? 'bg-green-500 text-white' 
+                                                : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+                                        }`}
+                                    >
+                                        Clinical
+                                    </button>
+                                    <button
+                                        onClick={() => setQuickAddType('goal')}
+                                        className={`px-3 py-2 rounded text-sm ${
+                                            quickAddType === 'goal' 
+                                                ? 'bg-purple-500 text-white' 
+                                                : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+                                        }`}
+                                    >
+                                        Goal
+                                    </button>
+                                </div>
+
+                                <input
+                                    type="text"
+                                    placeholder={`${quickAddType === 'assignment' ? 'Assignment' : quickAddType === 'clinical' ? 'Clinical' : 'Goal'} title`}
+                                    value={quickAddData.title}
+                                    onChange={(e) => setQuickAddData({...quickAddData, title: e.target.value})}
+                                    className="w-full p-3 border rounded theme-transition"
+                                    autoFocus
+                                />
+
+                                {quickAddType === 'assignment' && (
+                                    <select
+                                        value={quickAddData.course}
+                                        onChange={(e) => setQuickAddData({...quickAddData, course: e.target.value})}
+                                        className="w-full p-3 border rounded theme-transition"
+                                    >
+                                        <option value="">Select Course</option>
+                                        {initialCourses[currentSemester]?.map(course => (
+                                            <option key={course.code} value={course.code}>
+                                                {course.code}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
+
+                                {quickAddType === 'clinical' && (
+                                    <>
+                                        <input
+                                            type="text"
+                                            placeholder="Location (e.g., WRH - Met Campus)"
+                                            value={quickAddData.location}
+                                            onChange={(e) => setQuickAddData({...quickAddData, location: e.target.value})}
+                                            className="w-full p-3 border rounded theme-transition"
+                                        />
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            placeholder="Hours"
+                                            value={quickAddData.hours}
+                                            onChange={(e) => setQuickAddData({...quickAddData, hours: e.target.value})}
+                                            className="w-full p-3 border rounded theme-transition"
+                                        />
+                                    </>
+                                )}
+
+                                {quickAddType === 'goal' && (
+                                    <select
+                                        value={quickAddData.category}
+                                        onChange={(e) => setQuickAddData({...quickAddData, category: e.target.value})}
+                                        className="w-full p-3 border rounded theme-transition"
+                                    >
+                                        <option value="academic">Academic</option>
+                                        <option value="clinical">Clinical</option>
+                                        <option value="personal">Personal</option>
+                                        <option value="career">Career</option>
+                                    </select>
+                                )}
+
+                                <input
+                                    type="date"
+                                    value={quickAddData.dueDate}
+                                    onChange={(e) => setQuickAddData({...quickAddData, dueDate: e.target.value})}
+                                    className="w-full p-3 border rounded theme-transition"
+                                />
+
+                                <div className="flex space-x-3">
+                                    <button
+                                        onClick={handleQuickAdd}
+                                        className={`flex-1 p-3 rounded font-medium text-white ${
+                                            quickAddType === 'assignment' ? 'bg-blue-500 hover:bg-blue-600' :
+                                            quickAddType === 'clinical' ? 'bg-green-500 hover:bg-green-600' :
+                                            'bg-purple-500 hover:bg-purple-600'
+                                        }`}
+                                    >
+                                        <i className={`fas ${
+                                            quickAddType === 'assignment' ? 'fa-book' :
+                                            quickAddType === 'clinical' ? 'fa-hospital' : 'fa-bullseye'
+                                        } mr-2`}></i>
+                                        Add {quickAddType}
+                                    </button>
+                                    <button
+                                        onClick={() => setShowQuickAdd(false)}
+                                        className="px-4 py-3 bg-gray-500 text-white rounded font-medium hover:bg-gray-600"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
             return (
-                <div className="min-h-screen bg-gray-50">
-                    <header className="bg-white shadow-sm border-b">
+                <div className="min-h-screen bg-gray-50 theme-transition">
+                    <header className="bg-white shadow-sm border-b theme-transition">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div className="flex justify-between items-center py-4">
                                 <div className="flex items-center">
@@ -1939,14 +2802,17 @@
                                         St. Clair Nursing Organizer
                                     </h1>
                                 </div>
-                                <div className="text-sm text-gray-600">
-                                    Semester {currentSemester} • Practical Nursing Program
+                                <div className="flex items-center space-x-4">
+                                    <div className="text-sm text-gray-600">
+                                        Semester {currentSemester} • Practical Nursing Program
+                                    </div>
+                                    <ThemeToggle />
                                 </div>
                             </div>
                         </div>
                     </header>
 
-                    <nav className="bg-white shadow-sm">
+                    <nav className="bg-white shadow-sm theme-transition">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div className="flex space-x-4 overflow-x-auto">
                                 {tabs.map(tab => (
@@ -1971,7 +2837,19 @@
                         {renderActiveTab()}
                     </main>
 
-                    <footer className="bg-white border-t mt-12">
+                    {/* Quick Add Floating Action Button - Mobile Friendly */}
+                    <button
+                        onClick={() => setShowQuickAdd(true)}
+                        className="fixed bottom-4 right-4 md:bottom-6 md:right-6 bg-gradient-to-r from-blue-500 to-purple-600 text-white p-3 md:p-4 rounded-full shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 z-40 touch-manipulation"
+                        title="Quick Add"
+                    >
+                        <i className="fas fa-plus text-lg md:text-xl"></i>
+                    </button>
+
+                    {/* Quick Add Widget */}
+                    <QuickAddWidget />
+
+                    <footer className="bg-white border-t mt-12 theme-transition">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                             <div className="text-center text-sm text-gray-500 space-y-2">
                                 <div>Made with ❤️ for your nursing school success</div>
@@ -1989,7 +2867,14 @@
             );
         }
 
-        ReactDOM.render(<App />, document.getElementById('root'));
+        // Wrap App with ThemeProvider
+        const AppWithTheme = () => (
+            <ThemeProvider>
+                <App />
+            </ThemeProvider>
+        );
+
+        ReactDOM.render(<AppWithTheme />, document.getElementById('root'));
     </script>
 </body>
 </html>

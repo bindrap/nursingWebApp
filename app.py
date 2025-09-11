@@ -104,6 +104,19 @@ def init_database():
         )
     ''')
     
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS stress_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL UNIQUE,
+            stress_level INTEGER NOT NULL,
+            mood TEXT,
+            notes TEXT,
+            study_hours REAL,
+            sleep_hours REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -175,13 +188,27 @@ def clinical_shifts():
         conn.close()
         return jsonify({'id': shift_id}), 201
 
-@app.route('/api/clinical-shifts/<int:shift_id>', methods=['DELETE'])
+@app.route('/api/clinical-shifts/<int:shift_id>', methods=['PUT', 'DELETE'])
 def clinical_shift_detail(shift_id):
     conn = get_db_connection()
-    conn.execute('DELETE FROM clinical_shifts WHERE id = ?', (shift_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({'success': True})
+    
+    if request.method == 'PUT':
+        data = request.json
+        conn.execute('''
+            UPDATE clinical_shifts 
+            SET date=?, start_time=?, end_time=?, location=?, unit=?, hours=?
+            WHERE id=?
+        ''', (data['date'], data.get('start_time'), data.get('end_time'),
+              data['location'], data.get('unit'), data['hours'], shift_id))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+    
+    elif request.method == 'DELETE':
+        conn.execute('DELETE FROM clinical_shifts WHERE id = ?', (shift_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
 
 @app.route('/api/requirements', methods=['GET', 'POST'])
 def requirements():
@@ -325,6 +352,35 @@ def flashcards():
 def flashcard_detail(card_id):
     conn = get_db_connection()
     conn.execute('DELETE FROM flashcards WHERE id = ?', (card_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/stress-logs', methods=['GET', 'POST'])
+def stress_logs():
+    conn = get_db_connection()
+    
+    if request.method == 'GET':
+        logs = conn.execute('SELECT * FROM stress_logs ORDER BY date DESC').fetchall()
+        conn.close()
+        return jsonify([dict(row) for row in logs])
+    
+    elif request.method == 'POST':
+        data = request.json
+        conn.execute('''
+            INSERT OR REPLACE INTO stress_logs (date, stress_level, mood, notes, study_hours, sleep_hours)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (data['date'], data['stress_level'], data.get('mood'), 
+              data.get('notes'), data.get('study_hours'), data.get('sleep_hours')))
+        conn.commit()
+        log_id = conn.lastrowid
+        conn.close()
+        return jsonify({'id': log_id}), 201
+
+@app.route('/api/stress-logs/<int:log_id>', methods=['DELETE'])
+def stress_log_detail(log_id):
+    conn = get_db_connection()
+    conn.execute('DELETE FROM stress_logs WHERE id = ?', (log_id,))
     conn.commit()
     conn.close()
     return jsonify({'success': True})
