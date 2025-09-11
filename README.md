@@ -1,3 +1,83 @@
+# Nursing School Organizer - Database Setup
+
+## Quick Setup Guide
+
+### 1. Install Python Dependencies
+```bash
+pip install Flask==2.3.3 Flask-CORS==4.0.0 python-dotenv==1.0.0
+```
+
+### 2. Save the Backend Code
+Save the Python backend code as `app.py` in your project directory.
+
+### 3. Run the Backend Server
+```bash
+python app.py
+```
+
+The server will start on `http://localhost:5000`
+
+### 4. Update the Frontend
+Replace your `template.html` with the updated version that includes database connectivity.
+
+### 5. Open the Frontend
+Open `template.html` in your browser. The app will automatically:
+- Connect to the database
+- Initialize with default St. Clair requirements
+- Sync all data across browsers and devices
+
+## Features Added
+
+### Database Benefits:
+- **Cross-Browser Persistence**: Data works on any browser, any device
+- **Backup/Restore**: Built-in data export functionality  
+- **Concurrent Access**: Multiple users can access the same data
+- **Data Integrity**: SQL database ensures data consistency
+- **Scalability**: Easy to add new features and data types
+
+### API Endpoints:
+- `GET/POST /api/assignments` - Manage assignments
+- `GET/POST /api/clinical-shifts` - Track clinical hours
+- `GET/POST /api/requirements` - Monitor requirements
+- `GET/POST /api/goals` - Track goals
+- `GET/POST /api/grades` - Record grades
+- `GET/POST /api/flashcards` - Study cards
+- `GET/POST /api/settings` - App settings
+- `GET /api/backup` - Export all data
+
+### File Structure:
+```
+nursing WebApp/
+├── app.py                 # Backend server
+├── template.html          # Frontend app
+├── nursing_app.db         # SQLite database (auto-created)
+├── favicon_io/            # Your favicon files
+│   ├── favicon.ico
+│   ├── apple-touch-icon.png
+│   └── ...
+└── README.md
+```
+
+## Troubleshooting
+
+### Port Issues
+If port 5000 is busy, change the port in `app.py`:
+```python
+app.run(debug=True, host='0.0.0.0', port=5001)
+```
+
+### CORS Issues
+The backend includes CORS headers for cross-origin requests.
+
+### Database Location
+The SQLite database file `nursing_app.db` will be created in the same directory as `app.py`.
+
+## Usage
+1. Start the backend: `python app.py`
+2. Open `template.html` in any browser
+3. All data automatically syncs to the database
+4. Access from multiple browsers/devices using the same backend
+
 Key Features Included:
 Dashboard
 

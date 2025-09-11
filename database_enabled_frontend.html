@@ -1,0 +1,1995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>St. Clair Nursing School Organizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="apple-touch-icon" sizes="180x180" href="favicon_io/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon_io/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon_io/favicon-16x16.png">
+    <link rel="manifest" href="favicon_io/site.webmanifest">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-shadow {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .progress-bar {
+            transition: width 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // API Configuration
+        const API_BASE = 'http://localhost:5000/api';
+
+        // API Helper Functions
+        const api = {
+            async get(endpoint) {
+                const response = await fetch(`${API_BASE}${endpoint}`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                return await response.json();
+            },
+            
+            async post(endpoint, data) {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                return await response.json();
+            },
+            
+            async put(endpoint, data) {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                return await response.json();
+            },
+            
+            async delete(endpoint) {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    method: 'DELETE'
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                return await response.json();
+            }
+        };
+
+        // Initial data based on St. Clair program
+        const initialCourses = {
+            1: [
+                { code: 'PNR116', title: 'Introduction To The Practice Of Nursing', credits: 6 },
+                { code: 'PNR125', title: 'Nursing Clinical I', credits: 6 },
+                { code: 'BIO126', title: 'Anatomy, Physiology & Pathophysiology', credits: 7 },
+                { code: 'ELEC1030', title: 'Choose 1 Elective Course', credits: 3 }
+            ],
+            2: [
+                { code: 'PNR217', title: 'Pharmacology & Therapeutics', credits: 2 },
+                { code: 'PNR218', title: 'Health Assessment', credits: 3 },
+                { code: 'PNR220', title: 'Nursing Theory IIA', credits: 2 },
+                { code: 'PNR221', title: 'Nursing Theory IIB', credits: 2 },
+                { code: 'PNR225', title: 'Nursing Clinical II', credits: 8 }
+            ],
+            3: [
+                { code: 'PNR308', title: 'Nursing Theory III A', credits: 2 },
+                { code: 'PNR309', title: 'Nursing Theory III B', credits: 3 },
+                { code: 'PNR315', title: 'Community Health', credits: 2 },
+                { code: 'PNR316', title: 'Nursing Clinical III', credits: 8 },
+                { code: 'ELEC1030', title: 'Choose 1 Elective Course', credits: 3 },
+                { code: 'ELEC1030', title: 'Choose 1 Elective Course', credits: 3 }
+            ],
+            4: [
+                { code: 'PNR408', title: 'Nursing Theory IV A', credits: 3 },
+                { code: 'PNR411', title: 'Nursing Clinical IV', credits: 12 },
+                { code: 'PNR413', title: 'Nursing Theory IV B', credits: 3 },
+                { code: 'PNR415', title: 'Management Leadership & Research', credits: 2 }
+            ],
+            5: [
+                { code: 'PNR513', title: 'Comprehensive Clinical Experience', credits: 27 }
+            ]
+        };
+
+        const importantDates = [
+            { date: '2025-08-01', event: 'Medical & Non-medical Clinical Clearance Deadline', type: 'deadline' },
+            { date: '2025-09-02', event: 'Classes Begin', type: 'start' },
+            { date: '2025-09-04', event: 'PNR 316 Orientation & Math Test (Sections 10-18)', type: 'exam' },
+            { date: '2025-09-05', event: 'PNR 316 Orientation & Math Test (Sections 1-9)', type: 'exam' },
+            { date: '2025-10-13', event: 'Thanksgiving Holiday', type: 'holiday' },
+            { date: '2025-12-08', event: 'Exam Week Begins', type: 'exam' },
+            { date: '2025-12-12', event: 'Exam Week Ends', type: 'exam' }
+        ];
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [assignments, setAssignments] = useState([]);
+            const [clinicalShifts, setClinicalShifts] = useState([]);
+            const [requirements, setRequirements] = useState([]);
+            const [goals, setGoals] = useState([]);
+            const [grades, setGrades] = useState([]);
+            const [flashcards, setFlashcards] = useState([]);
+            const [currentSemester, setCurrentSemester] = useState(1);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+
+            // Load data from database on mount
+            useEffect(() => {
+                loadAllData();
+            }, []);
+
+            const loadAllData = async () => {
+                try {
+                    setLoading(true);
+                    setError(null);
+                    
+                    // Initialize database with default data
+                    await api.post('/initialize', {});
+                    
+                    // Load all data
+                    const [
+                        assignmentsData,
+                        shiftsData,
+                        requirementsData,
+                        goalsData,
+                        gradesData,
+                        flashcardsData,
+                        settingsData
+                    ] = await Promise.all([
+                        api.get('/assignments'),
+                        api.get('/clinical-shifts'),
+                        api.get('/requirements'),
+                        api.get('/goals'),
+                        api.get('/grades'),
+                        api.get('/flashcards'),
+                        api.get('/settings')
+                    ]);
+
+                    // Convert database format to app format
+                    setAssignments(assignmentsData.map(a => ({
+                        id: a.id,
+                        title: a.title,
+                        course: a.course,
+                        dueDate: a.due_date,
+                        weight: a.weight,
+                        status: a.status,
+                        completed: a.completed
+                    })));
+
+                    setClinicalShifts(shiftsData.map(s => ({
+                        id: s.id,
+                        date: s.date,
+                        startTime: s.start_time,
+                        endTime: s.end_time,
+                        location: s.location,
+                        unit: s.unit,
+                        hours: s.hours
+                    })));
+
+                    setRequirements(requirementsData.map(r => ({
+                        id: r.id,
+                        name: r.name,
+                        deadline: r.deadline,
+                        status: r.status,
+                        renewalMonths: r.renewal_months
+                    })));
+
+                    setGoals(goalsData.map(g => ({
+                        id: g.id,
+                        title: g.title,
+                        description: g.description,
+                        targetDate: g.target_date,
+                        category: g.category,
+                        completed: g.completed,
+                        createdDate: g.created_date
+                    })));
+
+                    setGrades(gradesData.map(g => ({
+                        id: g.id,
+                        course: g.course,
+                        assessment: g.assessment,
+                        type: g.type,
+                        grade: g.grade,
+                        maxPoints: g.max_points,
+                        weight: g.weight,
+                        date: g.date,
+                        percentage: g.percentage
+                    })));
+
+                    setFlashcards(flashcardsData.map(f => ({
+                        id: f.id,
+                        question: f.question,
+                        answer: f.answer
+                    })));
+
+                    // Set current semester from settings
+                    setCurrentSemester(parseInt(settingsData.currentSemester) || 1);
+
+                } catch (err) {
+                    console.error('Error loading data:', err);
+                    setError('Failed to connect to database. Make sure the Flask server is running.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            // Database operation functions
+            const addAssignmentToDB = async (assignment) => {
+                try {
+                    const result = await api.post('/assignments', assignment);
+                    await loadAllData(); // Refresh data
+                } catch (err) {
+                    console.error('Error adding assignment:', err);
+                }
+            };
+
+            const updateAssignmentInDB = async (id, updates) => {
+                try {
+                    await api.put(`/assignments/${id}`, updates);
+                    await loadAllData();
+                } catch (err) {
+                    console.error('Error updating assignment:', err);
+                }
+            };
+
+            const deleteAssignmentFromDB = async (id) => {
+                try {
+                    await api.delete(`/assignments/${id}`);
+                    await loadAllData();
+                } catch (err) {
+                    console.error('Error deleting assignment:', err);
+                }
+            };
+
+            const addClinicalShiftToDB = async (shift) => {
+                try {
+                    await api.post('/clinical-shifts', shift);
+                    await loadAllData();
+                } catch (err) {
+                    console.error('Error adding clinical shift:', err);
+                }
+            };
+
+            const deleteClinicalShiftFromDB = async (id) => {
+                try {
+                    await api.delete(`/clinical-shifts/${id}`);
+                    await loadAllData();
+                } catch (err) {
+                    console.error('Error deleting clinical shift:', err);
+                }
+            };
+
+            const addGradeToDB = async (grade) => {
+                try {
+                    await api.post('/grades', grade);
+                    await loadAllData();
+                } catch (err) {
+                    console.error('Error adding grade:', err);
+                }
+            };
+
+            const deleteGradeFromDB = async (id) => {
+                try {
+                    await api.delete(`/grades/${id}`);
+                    await loadAllData();
+                } catch (err) {
+                    console.error('Error deleting grade:', err);
+                }
+            };
+
+            const addGoalToDB = async (goal) => {
+                try {
+                    await api.post('/goals', goal);
+                    await loadAllData();
+                } catch (err) {
+                    console.error('Error adding goal:', err);
+                }
+            };
+
+            const updateGoalInDB = async (id, updates) => {
+                try {
+                    await api.put(`/goals/${id}`, updates);
+                    await loadAllData();
+                } catch (err) {
+                    console.error('Error updating goal:', err);
+                }
+            };
+
+            const deleteGoalFromDB = async (id) => {
+                try {
+                    await api.delete(`/goals/${id}`);
+                    await loadAllData();
+                } catch (err) {
+                    console.error('Error deleting goal:', err);
+                }
+            };
+
+            const addFlashcardToDB = async (card) => {
+                try {
+                    await api.post('/flashcards', card);
+                    await loadAllData();
+                } catch (err) {
+                    console.error('Error adding flashcard:', err);
+                }
+            };
+
+            const deleteFlashcardFromDB = async (id) => {
+                try {
+                    await api.delete(`/flashcards/${id}`);
+                    await loadAllData();
+                } catch (err) {
+                    console.error('Error deleting flashcard:', err);
+                }
+            };
+
+            // Utility functions
+            const getDaysUntil = (date) => {
+                const today = new Date();
+                const targetDate = new Date(date);
+                const diffTime = targetDate - today;
+                return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            };
+
+            const getUrgentItems = () => {
+                const urgent = [];
+                
+                assignments.forEach(assignment => {
+                    if (!assignment.completed) {
+                        const daysUntil = getDaysUntil(assignment.dueDate);
+                        if (daysUntil <= 3) {
+                            urgent.push({
+                                ...assignment,
+                                type: 'assignment',
+                                daysUntil
+                            });
+                        }
+                    }
+                });
+
+                requirements.forEach((req, index) => {
+                    if (req.status !== 'completed') {
+                        const daysUntil = getDaysUntil(req.deadline);
+                        if (daysUntil <= 7) {
+                            urgent.push({
+                                ...req,
+                                type: 'requirement',
+                                daysUntil
+                            });
+                        }
+                    }
+                });
+
+                return urgent.sort((a, b) => a.daysUntil - b.daysUntil);
+            };
+
+            // Loading screen
+            if (loading) {
+                return (
+                    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                            <p className="text-gray-600">Loading your nursing data...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Error screen
+            if (error) {
+                return (
+                    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                        <div className="text-center max-w-md">
+                            <div className="text-red-500 text-6xl mb-4">
+                                <i className="fas fa-exclamation-triangle"></i>
+                            </div>
+                            <h2 className="text-2xl font-bold text-gray-800 mb-2">Connection Error</h2>
+                            <p className="text-gray-600 mb-4">{error}</p>
+                            <button 
+                                onClick={loadAllData}
+                                className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700"
+                            >
+                                Retry Connection
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Dashboard Component
+            const Dashboard = () => {
+                const urgentItems = getUrgentItems();
+                const totalClinicalHours = clinicalShifts.reduce((sum, shift) => sum + Number(shift.hours || 0), 0);
+                const completedAssignments = assignments.filter(a => a.completed).length;
+                const upcomingAssignments = assignments.filter(a => !a.completed).length;
+
+                return (
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <div className="flex items-center">
+                                    <div className="bg-blue-500 p-3 rounded-lg">
+                                        <i className="fas fa-book text-white text-xl"></i>
+                                    </div>
+                                    <div className="ml-4">
+                                        <p className="text-sm text-gray-600">Assignments</p>
+                                        <p className="text-2xl font-bold">{upcomingAssignments}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <div className="flex items-center">
+                                    <div className="bg-green-500 p-3 rounded-lg">
+                                        <i className="fas fa-hospital text-white text-xl"></i>
+                                    </div>
+                                    <div className="ml-4">
+                                        <p className="text-sm text-gray-600">Clinical Hours</p>
+                                        <p className="text-2xl font-bold">{totalClinicalHours}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <div className="flex items-center">
+                                    <div className="bg-purple-500 p-3 rounded-lg">
+                                        <i className="fas fa-check text-white text-xl"></i>
+                                    </div>
+                                    <div className="ml-4">
+                                        <p className="text-sm text-gray-600">Completed</p>
+                                        <p className="text-2xl font-bold">{completedAssignments}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <div className="flex items-center">
+                                    <div className="bg-yellow-500 p-3 rounded-lg">
+                                        <i className="fas fa-exclamation text-white text-xl"></i>
+                                    </div>
+                                    <div className="ml-4">
+                                        <p className="text-sm text-gray-600">Urgent Items</p>
+                                        <p className="text-2xl font-bold">{urgentItems.length}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {urgentItems.length > 0 && (
+                            <div className="bg-red-50 border border-red-200 p-6 rounded-lg">
+                                <h3 className="text-lg font-semibold text-red-800 mb-4">
+                                    <i className="fas fa-exclamation-triangle mr-2"></i>
+                                    Urgent Items Need Attention!
+                                </h3>
+                                <div className="space-y-3">
+                                    {urgentItems.map((item, index) => (
+                                        <div key={index} className="flex justify-between items-center bg-white p-3 rounded border border-red-200">
+                                            <div>
+                                                <span className="font-medium">
+                                                    {item.type === 'assignment' ? item.title : item.name}
+                                                </span>
+                                                {item.type === 'assignment' && <span className="text-sm text-gray-600 ml-2">({item.course})</span>}
+                                            </div>
+                                            <span className={`text-sm px-2 py-1 rounded ${
+                                                item.daysUntil < 0 ? 'bg-red-100 text-red-800' :
+                                                item.daysUntil === 0 ? 'bg-orange-100 text-orange-800' :
+                                                'bg-yellow-100 text-yellow-800'
+                                            }`}>
+                                                {item.daysUntil < 0 ? `${Math.abs(item.daysUntil)} days overdue` :
+                                                 item.daysUntil === 0 ? 'Due today' :
+                                                 `${item.daysUntil} days left`}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-xl font-semibold mb-4">Recent Assignments</h3>
+                                <div className="space-y-3">
+                                    {assignments.slice(0, 5).map(assignment => (
+                                        <div key={assignment.id} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                                            <div>
+                                                <div className="font-medium">{assignment.title}</div>
+                                                <div className="text-sm text-gray-600">{assignment.course}</div>
+                                            </div>
+                                            <div className="text-sm">
+                                                <div className={`px-2 py-1 rounded text-xs ${
+                                                    assignment.completed ? 'bg-green-100 text-green-800' :
+                                                    assignment.status === 'in-progress' ? 'bg-blue-100 text-blue-800' :
+                                                    'bg-gray-100 text-gray-800'
+                                                }`}>
+                                                    {assignment.completed ? 'Completed' : assignment.status.replace('-', ' ')}
+                                                </div>
+                                                <div className="text-gray-500 mt-1">{assignment.dueDate}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-xl font-semibold mb-4">Recent Clinical Shifts</h3>
+                                <div className="space-y-3">
+                                    {clinicalShifts.slice(-5).map(shift => (
+                                        <div key={shift.id} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                                            <div>
+                                                <div className="font-medium">{shift.location}</div>
+                                                <div className="text-sm text-gray-600">{shift.unit}</div>
+                                            </div>
+                                            <div className="text-right text-sm">
+                                                <div className="font-medium text-blue-600">{shift.hours}h</div>
+                                                <div className="text-gray-500">{shift.date}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // Assignment Tracker Component
+            const AssignmentTracker = () => {
+                const [newAssignment, setNewAssignment] = useState({
+                    title: '',
+                    course: '',
+                    dueDate: '',
+                    weight: '',
+                    status: 'not-started'
+                });
+
+                const addAssignment = () => {
+                    if (newAssignment.title && newAssignment.course && newAssignment.dueDate) {
+                        addAssignmentToDB(newAssignment);
+                        setNewAssignment({
+                            title: '',
+                            course: '',
+                            dueDate: '',
+                            weight: '',
+                            status: 'not-started'
+                        });
+                    }
+                };
+
+                const toggleAssignment = (assignment) => {
+                    const updates = {
+                        title: assignment.title,
+                        course: assignment.course,
+                        dueDate: assignment.dueDate,
+                        weight: assignment.weight,
+                        status: assignment.status,
+                        completed: !assignment.completed
+                    };
+                    updateAssignmentInDB(assignment.id, updates);
+                };
+
+                const updateStatus = (assignment, newStatus) => {
+                    const updates = {
+                        title: assignment.title,
+                        course: assignment.course,
+                        dueDate: assignment.dueDate,
+                        weight: assignment.weight,
+                        status: newStatus,
+                        completed: assignment.completed
+                    };
+                    updateAssignmentInDB(assignment.id, updates);
+                };
+
+                return (
+                    <div className="space-y-6">
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <h3 className="text-xl font-semibold mb-4">Add New Assignment</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                                <input
+                                    type="text"
+                                    placeholder="Assignment Title"
+                                    value={newAssignment.title}
+                                    onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})}
+                                    className="p-3 border rounded"
+                                />
+                                <select
+                                    value={newAssignment.course}
+                                    onChange={(e) => setNewAssignment({...newAssignment, course: e.target.value})}
+                                    className="p-3 border rounded"
+                                >
+                                    <option value="">Select Course</option>
+                                    {initialCourses[currentSemester]?.map(course => (
+                                        <option key={course.code} value={course.code}>
+                                            {course.code}
+                                        </option>
+                                    ))}
+                                </select>
+                                <input
+                                    type="date"
+                                    value={newAssignment.dueDate}
+                                    onChange={(e) => setNewAssignment({...newAssignment, dueDate: e.target.value})}
+                                    className="p-3 border rounded"
+                                />
+                                <input
+                                    type="number"
+                                    placeholder="Weight %"
+                                    value={newAssignment.weight}
+                                    onChange={(e) => setNewAssignment({...newAssignment, weight: e.target.value})}
+                                    className="p-3 border rounded"
+                                />
+                                <button
+                                    onClick={addAssignment}
+                                    className="bg-blue-500 text-white p-3 rounded hover:bg-blue-600"
+                                >
+                                    Add Assignment
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-lg card-shadow overflow-hidden">
+                            <div className="p-6 border-b">
+                                <h3 className="text-xl font-semibold">Assignments</h3>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Course</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Due Date</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Weight</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {assignments.map(assignment => {
+                                            const daysUntil = getDaysUntil(assignment.dueDate);
+                                            return (
+                                                <tr key={assignment.id} className={assignment.completed ? 'opacity-50' : ''}>
+                                                    <td className={`px-6 py-4 font-medium ${assignment.completed ? 'line-through' : ''}`}>
+                                                        {assignment.title}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-gray-600">{assignment.course}</td>
+                                                    <td className="px-6 py-4">
+                                                        <div>{assignment.dueDate}</div>
+                                                        <div className={`text-xs ${
+                                                            daysUntil < 0 ? 'text-red-600' :
+                                                            daysUntil <= 3 ? 'text-orange-600' :
+                                                            'text-gray-500'
+                                                        }`}>
+                                                            {daysUntil < 0 ? `${Math.abs(daysUntil)} days overdue` :
+                                                             daysUntil === 0 ? 'Due today' :
+                                                             `${daysUntil} days left`}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4">{assignment.weight}%</td>
+                                                    <td className="px-6 py-4">
+                                                        <select
+                                                            value={assignment.status}
+                                                            onChange={(e) => updateStatus(assignment, e.target.value)}
+                                                            className="text-xs p-1 border rounded"
+                                                        >
+                                                            <option value="not-started">Not Started</option>
+                                                            <option value="in-progress">In Progress</option>
+                                                            <option value="completed">Completed</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="px-6 py-4 space-x-2">
+                                                        <button
+                                                            onClick={() => toggleAssignment(assignment)}
+                                                            className={`px-3 py-1 rounded text-xs ${
+                                                                assignment.completed ? 'bg-gray-500 text-white' : 'bg-green-500 text-white'
+                                                            }`}
+                                                        >
+                                                            {assignment.completed ? 'Undo' : 'Complete'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => deleteAssignmentFromDB(assignment.id)}
+                                                            className="px-3 py-1 rounded text-xs bg-red-500 text-white"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                                {assignments.length === 0 && (
+                                    <div className="p-8 text-center text-gray-500">
+                                        No assignments added yet. Add your first assignment above!
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // Clinical Tracker Component
+            const ClinicalTracker = () => {
+                const [newShift, setNewShift] = useState({
+                    date: '',
+                    startTime: '',
+                    endTime: '',
+                    location: '',
+                    unit: '',
+                    hours: ''
+                });
+
+                const addShift = () => {
+                    if (newShift.date && newShift.location && newShift.hours) {
+                        addClinicalShiftToDB(newShift);
+                        setNewShift({
+                            date: '',
+                            startTime: '',
+                            endTime: '',
+                            location: '',
+                            unit: '',
+                            hours: ''
+                        });
+                    }
+                };
+
+                const totalHours = clinicalShifts.reduce((sum, shift) => sum + Number(shift.hours || 0), 0);
+                
+                const requiredHours = {
+                    1: 42, 2: 56, 3: 56, 4: 84, 5: 400
+                };
+
+                return (
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-lg font-semibold mb-2">Total Clinical Hours</h3>
+                                <p className="text-3xl font-bold text-blue-600">{totalHours}</p>
+                                <p className="text-sm text-gray-600">Hours completed</p>
+                            </div>
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-lg font-semibold mb-2">Required This Semester</h3>
+                                <p className="text-3xl font-bold text-green-600">{requiredHours[currentSemester] || 0}</p>
+                                <p className="text-sm text-gray-600">Semester {currentSemester} requirement</p>
+                            </div>
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-lg font-semibold mb-2">Progress</h3>
+                                <p className="text-3xl font-bold text-purple-600">
+                                    {Math.round((totalHours / (requiredHours[currentSemester] || 1)) * 100)}%
+                                </p>
+                                <div className="mt-2 bg-gray-200 rounded-full h-2">
+                                    <div 
+                                        className="bg-purple-600 h-2 rounded-full progress-bar"
+                                        style={{ width: `${Math.min((totalHours / (requiredHours[currentSemester] || 1)) * 100, 100)}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <h3 className="text-xl font-semibold mb-4">Add Clinical Shift</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
+                                <input
+                                    type="date"
+                                    value={newShift.date}
+                                    onChange={(e) => setNewShift({...newShift, date: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <input
+                                    type="time"
+                                    value={newShift.startTime}
+                                    onChange={(e) => setNewShift({...newShift, startTime: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <input
+                                    type="time"
+                                    value={newShift.endTime}
+                                    onChange={(e) => setNewShift({...newShift, endTime: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <select
+                                    value={newShift.location}
+                                    onChange={(e) => setNewShift({...newShift, location: e.target.value})}
+                                    className="p-2 border rounded"
+                                >
+                                    <option value="">Select Location</option>
+                                    <option value="Windsor Regional Hospital - Met Campus">WRH - Met Campus</option>
+                                    <option value="Windsor Regional Hospital - Ouellette Campus">WRH - Ouellette Campus</option>
+                                    <option value="Hotel Dieu Grace Healthcare">Hotel Dieu Grace</option>
+                                    <option value="Long Term Care">Long Term Care</option>
+                                </select>
+                                <input
+                                    type="text"
+                                    placeholder="Unit/Department"
+                                    value={newShift.unit}
+                                    onChange={(e) => setNewShift({...newShift, unit: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <input
+                                    type="number"
+                                    step="0.5"
+                                    placeholder="Hours"
+                                    value={newShift.hours}
+                                    onChange={(e) => setNewShift({...newShift, hours: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <button
+                                    onClick={addShift}
+                                    className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+                                >
+                                    Add Shift
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-lg card-shadow overflow-hidden">
+                            <div className="p-6 border-b">
+                                <h3 className="text-xl font-semibold">Clinical Shifts</h3>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hours</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {clinicalShifts.map(shift => (
+                                            <tr key={shift.id}>
+                                                <td className="px-6 py-4 font-medium">{shift.date}</td>
+                                                <td className="px-6 py-4 text-gray-600">
+                                                    {shift.startTime && shift.endTime ? 
+                                                        `${shift.startTime} - ${shift.endTime}` : 
+                                                        'Time not specified'}
+                                                </td>
+                                                <td className="px-6 py-4 text-gray-600">{shift.location}</td>
+                                                <td className="px-6 py-4 text-gray-600">{shift.unit}</td>
+                                                <td className="px-6 py-4 font-semibold text-blue-600">{shift.hours}h</td>
+                                                <td className="px-6 py-4">
+                                                    <button
+                                                        onClick={() => deleteClinicalShiftFromDB(shift.id)}
+                                                        className="px-3 py-1 rounded text-xs bg-red-500 text-white"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {clinicalShifts.length === 0 && (
+                                    <div className="p-8 text-center text-gray-500">
+                                        No clinical shifts added yet. Add your first shift above!
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const Calendar = () => {
+                const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+                const [viewMode, setViewMode] = useState('month');
+
+                const getAllEvents = () => {
+                    const events = [];
+                    
+                    importantDates.forEach(date => {
+                        events.push({
+                            ...date,
+                            id: `important-${date.date}`,
+                            category: 'important'
+                        });
+                    });
+
+                    assignments.forEach(assignment => {
+                        events.push({
+                            date: assignment.dueDate,
+                            event: `${assignment.title} (${assignment.course})`,
+                            type: assignment.completed ? 'completed-assignment' : 'assignment',
+                            id: `assignment-${assignment.id}`,
+                            category: 'assignment',
+                            completed: assignment.completed
+                        });
+                    });
+
+                    clinicalShifts.forEach(shift => {
+                        events.push({
+                            date: shift.date,
+                            event: `Clinical - ${shift.location} (${shift.hours}h)`,
+                            type: 'clinical',
+                            id: `clinical-${shift.id}`,
+                            category: 'clinical'
+                        });
+                    });
+
+                    requirements.forEach((req, index) => {
+                        if (req.status !== 'completed') {
+                            events.push({
+                                date: req.deadline,
+                                event: `${req.name} Due`,
+                                type: 'requirement',
+                                id: `requirement-${index}`,
+                                category: 'requirement'
+                            });
+                        }
+                    });
+
+                    return events.sort((a, b) => new Date(a.date) - new Date(b.date));
+                };
+
+                const allEvents = getAllEvents();
+                const eventsForSelectedDate = allEvents.filter(event => event.date === selectedDate);
+
+                const getEventColor = (category, type) => {
+                    if (type === 'completed-assignment') return 'bg-gray-100 text-gray-600 border-gray-200';
+                    
+                    switch (category) {
+                        case 'important': return 'bg-purple-100 text-purple-800 border-purple-200';
+                        case 'assignment': return 'bg-blue-100 text-blue-800 border-blue-200';
+                        case 'clinical': return 'bg-green-100 text-green-800 border-green-200';
+                        case 'requirement': return 'bg-red-100 text-red-800 border-red-200';
+                        default: return 'bg-gray-100 text-gray-800 border-gray-200';
+                    }
+                };
+
+                const generateCalendarDays = () => {
+                    const today = new Date();
+                    const currentMonth = today.getMonth();
+                    const currentYear = today.getFullYear();
+                    
+                    const firstDay = new Date(currentYear, currentMonth, 1);
+                    const lastDay = new Date(currentYear, currentMonth + 1, 0);
+                    const startDate = new Date(firstDay);
+                    startDate.setDate(startDate.getDate() - firstDay.getDay());
+                    
+                    const days = [];
+                    const current = new Date(startDate);
+                    
+                    for (let i = 0; i < 42; i++) {
+                        const dateStr = current.toISOString().split('T')[0];
+                        const eventsForDay = allEvents.filter(event => event.date === dateStr);
+                        const isCurrentMonth = current.getMonth() === currentMonth;
+                        const isToday = current.toDateString() === today.toDateString();
+                        
+                        days.push({
+                            date: new Date(current),
+                            dateStr,
+                            events: eventsForDay,
+                            isCurrentMonth,
+                            isToday
+                        });
+                        
+                        current.setDate(current.getDate() + 1);
+                    }
+                    
+                    return days;
+                };
+
+                const calendarDays = generateCalendarDays();
+                const monthNames = ["January", "February", "March", "April", "May", "June",
+                    "July", "August", "September", "October", "November", "December"];
+                const currentMonth = monthNames[new Date().getMonth()];
+                const currentYear = new Date().getFullYear();
+
+                return (
+                    <div className="space-y-6">
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-xl font-semibold">Academic Calendar</h3>
+                                <div className="flex space-x-2">
+                                    <button
+                                        onClick={() => setViewMode('month')}
+                                        className={`px-4 py-2 rounded ${
+                                            viewMode === 'month' ? 'bg-purple-500 text-white' : 'bg-gray-200 text-gray-700'
+                                        }`}
+                                    >
+                                        Month View
+                                    </button>
+                                    <button
+                                        onClick={() => setViewMode('list')}
+                                        className={`px-4 py-2 rounded ${
+                                            viewMode === 'list' ? 'bg-purple-500 text-white' : 'bg-gray-200 text-gray-700'
+                                        }`}
+                                    >
+                                        List View
+                                    </button>
+                                </div>
+                            </div>
+
+                            {viewMode === 'month' ? (
+                                <div>
+                                    <div className="text-center mb-4">
+                                        <h4 className="text-lg font-semibold">{currentMonth} {currentYear}</h4>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-7 gap-1 mb-2">
+                                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                                            <div key={day} className="p-2 text-center font-semibold text-gray-600 text-sm">
+                                                {day}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-7 gap-1">
+                                        {calendarDays.map((day, index) => (
+                                            <div
+                                                key={index}
+                                                onClick={() => setSelectedDate(day.dateStr)}
+                                                className={`p-2 min-h-20 border cursor-pointer hover:bg-gray-50 ${
+                                                    !day.isCurrentMonth ? 'text-gray-400 bg-gray-50' : ''
+                                                } ${
+                                                    day.isToday ? 'bg-purple-100 border-purple-500' : 'border-gray-200'
+                                                } ${
+                                                    selectedDate === day.dateStr ? 'ring-2 ring-purple-500' : ''
+                                                }`}
+                                            >
+                                                <div className="font-medium text-sm">{day.date.getDate()}</div>
+                                                <div className="space-y-1">
+                                                    {day.events.slice(0, 2).map(event => (
+                                                        <div
+                                                            key={event.id}
+                                                            className={`text-xs p-1 rounded border ${getEventColor(event.category, event.type)}`}
+                                                        >
+                                                            {event.event.length > 15 ? event.event.substring(0, 15) + '...' : event.event}
+                                                        </div>
+                                                    ))}
+                                                    {day.events.length > 2 && (
+                                                        <div className="text-xs text-gray-500">+{day.events.length - 2} more</div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {allEvents.length === 0 ? (
+                                        <div className="text-center text-gray-500 py-8">
+                                            No events scheduled. Add assignments, clinical shifts, or goals to see them here!
+                                        </div>
+                                    ) : (
+                                        allEvents.map(event => {
+                                            const daysUntil = getDaysUntil(event.date);
+                                            return (
+                                                <div
+                                                    key={event.id}
+                                                    className={`p-4 rounded-lg border ${getEventColor(event.category, event.type)}`}
+                                                >
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <h4 className="font-medium">{event.event}</h4>
+                                                            <p className="text-sm opacity-75">{event.date}</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <span className="text-xs px-2 py-1 rounded bg-white bg-opacity-50">
+                                                                {event.category}
+                                                            </span>
+                                                            <p className="text-xs mt-1">
+                                                                {daysUntil < 0 ? `${Math.abs(daysUntil)} days ago` :
+                                                                 daysUntil === 0 ? 'Today' :
+                                                                 `${daysUntil} days away`}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {selectedDate && eventsForSelectedDate.length > 0 && (
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-lg font-semibold mb-4">
+                                    Events for {new Date(selectedDate).toLocaleDateString('en-US', { 
+                                        weekday: 'long', 
+                                        year: 'numeric', 
+                                        month: 'long', 
+                                        day: 'numeric' 
+                                    })}
+                                </h3>
+                                <div className="space-y-3">
+                                    {eventsForSelectedDate.map(event => (
+                                        <div
+                                            key={event.id}
+                                            className={`p-3 rounded border ${getEventColor(event.category, event.type)}`}
+                                        >
+                                            <div className="font-medium">{event.event}</div>
+                                            <div className="text-sm opacity-75 capitalize">{event.category}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            const GradesTracker = () => {
+                const [newGrade, setNewGrade] = useState({
+                    course: '',
+                    assessment: '',
+                    type: 'assignment',
+                    grade: '',
+                    maxPoints: '',
+                    weight: '',
+                    date: ''
+                });
+
+                const addGrade = () => {
+                    if (newGrade.course && newGrade.assessment && newGrade.grade && newGrade.maxPoints) {
+                        addGradeToDB(newGrade);
+                        setNewGrade({
+                            course: '',
+                            assessment: '',
+                            type: 'assignment',
+                            grade: '',
+                            maxPoints: '',
+                            weight: '',
+                            date: ''
+                        });
+                    }
+                };
+
+                const calculateCourseAverage = (courseCode) => {
+                    const courseGrades = grades.filter(g => g.course === courseCode);
+                    if (courseGrades.length === 0) return 0;
+                    
+                    const totalWeighted = courseGrades.reduce((sum, grade) => {
+                        const weight = Number(grade.weight) || 1;
+                        return sum + (grade.percentage * weight);
+                    }, 0);
+                    
+                    const totalWeight = courseGrades.reduce((sum, grade) => {
+                        return sum + (Number(grade.weight) || 1);
+                    }, 0);
+                    
+                    return Math.round(totalWeighted / totalWeight);
+                };
+
+                const calculateOverallGPA = () => {
+                    const courses = initialCourses[currentSemester] || [];
+                    let totalWeightedGPA = 0;
+                    let totalCredits = 0;
+                    
+                    courses.forEach(course => {
+                        const average = calculateCourseAverage(course.code);
+                        if (average > 0) {
+                            let gpaPoints = 0;
+                            if (average >= 90) gpaPoints = 4.0;
+                            else if (average >= 85) gpaPoints = 3.7;
+                            else if (average >= 80) gpaPoints = 3.3;
+                            else if (average >= 75) gpaPoints = 3.0;
+                            else if (average >= 70) gpaPoints = 2.7;
+                            else if (average >= 65) gpaPoints = 2.3;
+                            else if (average >= 60) gpaPoints = 2.0;
+                            else gpaPoints = 0.0;
+                            
+                            totalWeightedGPA += gpaPoints * course.credits;
+                            totalCredits += course.credits;
+                        }
+                    });
+                    
+                    return totalCredits > 0 ? (totalWeightedGPA / totalCredits).toFixed(2) : '0.00';
+                };
+
+                const getGradeColor = (percentage) => {
+                    if (percentage >= 90) return 'text-green-600';
+                    if (percentage >= 80) return 'text-blue-600';
+                    if (percentage >= 70) return 'text-yellow-600';
+                    if (percentage >= 60) return 'text-orange-600';
+                    return 'text-red-600';
+                };
+
+                const getLetterGrade = (percentage) => {
+                    if (percentage >= 90) return 'A+';
+                    if (percentage >= 85) return 'A';
+                    if (percentage >= 80) return 'A-';
+                    if (percentage >= 75) return 'B+';
+                    if (percentage >= 70) return 'B';
+                    if (percentage >= 65) return 'B-';
+                    if (percentage >= 60) return 'C+';
+                    if (percentage >= 55) return 'C';
+                    if (percentage >= 50) return 'C-';
+                    return 'F';
+                };
+
+                return (
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-lg font-semibold mb-2">Current GPA</h3>
+                                <p className="text-3xl font-bold text-purple-600">{calculateOverallGPA()}</p>
+                                <p className="text-sm text-gray-600">4.0 Scale</p>
+                            </div>
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-lg font-semibold mb-2">Semester</h3>
+                                <p className="text-3xl font-bold text-blue-600">{currentSemester}</p>
+                                <p className="text-sm text-gray-600">Current Semester</p>
+                            </div>
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-lg font-semibold mb-2">Total Grades</h3>
+                                <p className="text-3xl font-bold text-green-600">{grades.length}</p>
+                                <p className="text-sm text-gray-600">Recorded</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <h3 className="text-xl font-semibold mb-4">Add Grade</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
+                                <select
+                                    value={newGrade.course}
+                                    onChange={(e) => setNewGrade({...newGrade, course: e.target.value})}
+                                    className="p-2 border rounded"
+                                >
+                                    <option value="">Select Course</option>
+                                    {initialCourses[currentSemester]?.map(course => (
+                                        <option key={course.code} value={course.code}>
+                                            {course.code}
+                                        </option>
+                                    ))}
+                                </select>
+                                <input
+                                    type="text"
+                                    placeholder="Assessment Name"
+                                    value={newGrade.assessment}
+                                    onChange={(e) => setNewGrade({...newGrade, assessment: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <select
+                                    value={newGrade.type}
+                                    onChange={(e) => setNewGrade({...newGrade, type: e.target.value})}
+                                    className="p-2 border rounded"
+                                >
+                                    <option value="assignment">Assignment</option>
+                                    <option value="quiz">Quiz</option>
+                                    <option value="test">Test</option>
+                                    <option value="lab">Lab</option>
+                                    <option value="midterm">Midterm</option>
+                                    <option value="exam">Exam</option>
+                                </select>
+                                <input
+                                    type="number"
+                                    placeholder="Grade"
+                                    value={newGrade.grade}
+                                    onChange={(e) => setNewGrade({...newGrade, grade: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <input
+                                    type="number"
+                                    placeholder="Max Points"
+                                    value={newGrade.maxPoints}
+                                    onChange={(e) => setNewGrade({...newGrade, maxPoints: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <input
+                                    type="number"
+                                    placeholder="Weight %"
+                                    value={newGrade.weight}
+                                    onChange={(e) => setNewGrade({...newGrade, weight: e.target.value})}
+                                    className="p-2 border rounded"
+                                />
+                                <button
+                                    onClick={addGrade}
+                                    className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+                                >
+                                    Add Grade
+                                </button>
+                            </div>
+                            <input
+                                type="date"
+                                value={newGrade.date}
+                                onChange={(e) => setNewGrade({...newGrade, date: e.target.value})}
+                                className="mt-4 p-2 border rounded"
+                            />
+                        </div>
+
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <h3 className="text-xl font-semibold mb-4">Course Averages</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {initialCourses[currentSemester]?.map(course => {
+                                    const average = calculateCourseAverage(course.code);
+                                    return (
+                                        <div key={course.code} className="p-4 border rounded">
+                                            <div className="flex justify-between items-center">
+                                                <div>
+                                                    <h4 className="font-semibold">{course.code}</h4>
+                                                    <p className="text-sm text-gray-600">{course.title}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className={`text-2xl font-bold ${getGradeColor(average)}`}>
+                                                        {average > 0 ? `${average}%` : 'N/A'}
+                                                    </p>
+                                                    <p className="text-sm text-gray-600">
+                                                        {average > 0 ? getLetterGrade(average) : ''}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-lg card-shadow overflow-hidden">
+                            <div className="p-6 border-b">
+                                <h3 className="text-xl font-semibold">All Grades</h3>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Course</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assessment</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Grade</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Percentage</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Weight</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {grades.map(grade => (
+                                            <tr key={grade.id}>
+                                                <td className="px-6 py-4 font-medium">{grade.course}</td>
+                                                <td className="px-6 py-4">{grade.assessment}</td>
+                                                <td className="px-6 py-4">
+                                                    <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800 capitalize">
+                                                        {grade.type}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">{grade.grade}/{grade.maxPoints}</td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`font-semibold ${getGradeColor(grade.percentage)}`}>
+                                                        {grade.percentage}% ({getLetterGrade(grade.percentage)})
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">{grade.weight || 'N/A'}%</td>
+                                                <td className="px-6 py-4">{grade.date || 'N/A'}</td>
+                                                <td className="px-6 py-4">
+                                                    <button
+                                                        onClick={() => deleteGradeFromDB(grade.id)}
+                                                        className="px-3 py-1 rounded text-xs bg-red-500 text-white"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {grades.length === 0 && (
+                                    <div className="p-8 text-center text-gray-500">
+                                        No grades recorded yet. Add your first grade above!
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const StudyPlanner = () => {
+                const [studyTimer, setStudyTimer] = useState(25 * 60);
+                const [isRunning, setIsRunning] = useState(false);
+                const [newCard, setNewCard] = useState({ question: '', answer: '' });
+                const [currentCardIndex, setCurrentCardIndex] = useState(0);
+                const [showAnswer, setShowAnswer] = useState(false);
+
+                useEffect(() => {
+                    let interval = null;
+                    if (isRunning && studyTimer > 0) {
+                        interval = setInterval(() => {
+                            setStudyTimer(timer => timer - 1);
+                        }, 1000);
+                    } else if (studyTimer === 0) {
+                        setIsRunning(false);
+                        alert('Study session complete! Take a 5-minute break.');
+                        setStudyTimer(25 * 60);
+                    }
+                    return () => clearInterval(interval);
+                }, [isRunning, studyTimer]);
+
+                const formatTime = (seconds) => {
+                    const mins = Math.floor(seconds / 60);
+                    const secs = seconds % 60;
+                    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                };
+
+                const addFlashcard = () => {
+                    if (newCard.question && newCard.answer) {
+                        addFlashcardToDB(newCard);
+                        setNewCard({ question: '', answer: '' });
+                    }
+                };
+
+                const nextCard = () => {
+                    setCurrentCardIndex((currentCardIndex + 1) % flashcards.length);
+                    setShowAnswer(false);
+                };
+
+                const prevCard = () => {
+                    setCurrentCardIndex(currentCardIndex === 0 ? flashcards.length - 1 : currentCardIndex - 1);
+                    setShowAnswer(false);
+                };
+
+                return (
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-xl font-semibold mb-4">Pomodoro Timer</h3>
+                                <div className="text-center">
+                                    <div className="text-6xl font-bold text-blue-600 mb-4">
+                                        {formatTime(studyTimer)}
+                                    </div>
+                                    <div className="space-x-4 mb-4">
+                                        <button
+                                            onClick={() => setIsRunning(!isRunning)}
+                                            className={`px-6 py-2 rounded font-semibold ${
+                                                isRunning ? 'bg-red-500 text-white' : 'bg-green-500 text-white'
+                                            }`}
+                                        >
+                                            {isRunning ? 'Pause' : 'Start'}
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setStudyTimer(25 * 60);
+                                                setIsRunning(false);
+                                            }}
+                                            className="px-6 py-2 rounded font-semibold bg-gray-500 text-white"
+                                        >
+                                            Reset
+                                        </button>
+                                    </div>
+                                    <div className="space-x-2">
+                                        <button
+                                            onClick={() => setStudyTimer(25 * 60)}
+                                            className="px-3 py-1 rounded text-sm bg-blue-100 text-blue-700"
+                                        >
+                                            25 min
+                                        </button>
+                                        <button
+                                            onClick={() => setStudyTimer(5 * 60)}
+                                            className="px-3 py-1 rounded text-sm bg-green-100 text-green-700"
+                                        >
+                                            5 min
+                                        </button>
+                                        <button
+                                            onClick={() => setStudyTimer(15 * 60)}
+                                            className="px-3 py-1 rounded text-sm bg-yellow-100 text-yellow-700"
+                                        >
+                                            15 min
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-lg card-shadow">
+                                <h3 className="text-xl font-semibold mb-4">Quick Notes</h3>
+                                <textarea
+                                    placeholder="Write your study notes here..."
+                                    className="w-full h-40 p-3 border rounded resize-none"
+                                    defaultValue={localStorage.getItem('studyNotes') || ''}
+                                    onChange={(e) => localStorage.setItem('studyNotes', e.target.value)}
+                                ></textarea>
+                            </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <h3 className="text-xl font-semibold mb-4">Flashcards</h3>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                <input
+                                    type="text"
+                                    placeholder="Question/Term"
+                                    value={newCard.question}
+                                    onChange={(e) => setNewCard({...newCard, question: e.target.value})}
+                                    className="p-3 border rounded"
+                                />
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Answer/Definition"
+                                        value={newCard.answer}
+                                        onChange={(e) => setNewCard({...newCard, answer: e.target.value})}
+                                        className="flex-1 p-3 border rounded"
+                                    />
+                                    <button
+                                        onClick={addFlashcard}
+                                        className="px-4 py-3 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+
+                            {flashcards.length > 0 && (
+                                <div className="text-center">
+                                    <div className="bg-gray-50 p-8 rounded-lg mb-4 min-h-48 flex flex-col justify-center">
+                                        <div className="text-lg font-semibold mb-4">
+                                            Card {currentCardIndex + 1} of {flashcards.length}
+                                        </div>
+                                        <div className="text-xl mb-4">
+                                            {flashcards[currentCardIndex]?.question}
+                                        </div>
+                                        {showAnswer && (
+                                            <div className="text-lg text-blue-600 border-t pt-4">
+                                                {flashcards[currentCardIndex]?.answer}
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="space-x-4">
+                                        <button
+                                            onClick={prevCard}
+                                            className="px-4 py-2 bg-gray-500 text-white rounded"
+                                            disabled={flashcards.length <= 1}
+                                        >
+                                            Previous
+                                        </button>
+                                        <button
+                                            onClick={() => setShowAnswer(!showAnswer)}
+                                            className="px-4 py-2 bg-blue-500 text-white rounded"
+                                        >
+                                            {showAnswer ? 'Hide Answer' : 'Show Answer'}
+                                        </button>
+                                        <button
+                                            onClick={nextCard}
+                                            className="px-4 py-2 bg-gray-500 text-white rounded"
+                                            disabled={flashcards.length <= 1}
+                                        >
+                                            Next
+                                        </button>
+                                        <button
+                                            onClick={() => deleteFlashcardFromDB(flashcards[currentCardIndex]?.id)}
+                                            className="px-4 py-2 bg-red-500 text-white rounded"
+                                        >
+                                            Delete Card
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {flashcards.length === 0 && (
+                                <div className="text-center text-gray-500 py-8">
+                                    No flashcards yet. Add your first flashcard above!
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            };
+
+            const GoalsTracker = () => {
+                const [newGoal, setNewGoal] = useState({
+                    title: '',
+                    description: '',
+                    targetDate: '',
+                    category: 'academic'
+                });
+
+                const addGoal = () => {
+                    if (newGoal.title && newGoal.targetDate) {
+                        addGoalToDB(newGoal);
+                        setNewGoal({
+                            title: '',
+                            description: '',
+                            targetDate: '',
+                            category: 'academic'
+                        });
+                    }
+                };
+
+                const toggleGoal = (goal) => {
+                    const updates = {
+                        title: goal.title,
+                        description: goal.description,
+                        targetDate: goal.targetDate,
+                        category: goal.category,
+                        completed: !goal.completed
+                    };
+                    updateGoalInDB(goal.id, updates);
+                };
+
+                const categoryColors = {
+                    academic: 'bg-blue-100 text-blue-800',
+                    clinical: 'bg-green-100 text-green-800',
+                    personal: 'bg-purple-100 text-purple-800',
+                    career: 'bg-orange-100 text-orange-800'
+                };
+
+                return (
+                    <div className="space-y-6">
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <h3 className="text-xl font-semibold mb-4">Add New Goal</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <input
+                                    type="text"
+                                    placeholder="Goal Title"
+                                    value={newGoal.title}
+                                    onChange={(e) => setNewGoal({...newGoal, title: e.target.value})}
+                                    className="p-3 border rounded"
+                                />
+                                <input
+                                    type="date"
+                                    value={newGoal.targetDate}
+                                    onChange={(e) => setNewGoal({...newGoal, targetDate: e.target.value})}
+                                    className="p-3 border rounded"
+                                />
+                                <select
+                                    value={newGoal.category}
+                                    onChange={(e) => setNewGoal({...newGoal, category: e.target.value})}
+                                    className="p-3 border rounded"
+                                >
+                                    <option value="academic">Academic</option>
+                                    <option value="clinical">Clinical</option>
+                                    <option value="personal">Personal</option>
+                                    <option value="career">Career</option>
+                                </select>
+                                <button
+                                    onClick={addGoal}
+                                    className="bg-blue-500 text-white p-3 rounded hover:bg-blue-600"
+                                >
+                                    Add Goal
+                                </button>
+                            </div>
+                            <textarea
+                                placeholder="Goal Description (optional)"
+                                value={newGoal.description}
+                                onChange={(e) => setNewGoal({...newGoal, description: e.target.value})}
+                                className="w-full p-3 border rounded mt-4"
+                                rows="3"
+                            ></textarea>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {goals.map(goal => {
+                                const daysUntil = getDaysUntil(goal.targetDate);
+                                return (
+                                    <div key={goal.id} className={`bg-white p-6 rounded-lg card-shadow ${
+                                        goal.completed ? 'opacity-75' : ''
+                                    }`}>
+                                        <div className="flex justify-between items-start mb-3">
+                                            <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                categoryColors[goal.category]
+                                            }`}>
+                                                {goal.category}
+                                            </span>
+                                            <div className="flex space-x-2">
+                                                <button
+                                                    onClick={() => toggleGoal(goal)}
+                                                    className={`text-sm ${
+                                                        goal.completed ? 'text-green-600' : 'text-gray-400'
+                                                    }`}
+                                                >
+                                                    <i className={`fas ${
+                                                        goal.completed ? 'fa-check-circle' : 'fa-circle'
+                                                    }`}></i>
+                                                </button>
+                                                <button
+                                                    onClick={() => deleteGoalFromDB(goal.id)}
+                                                    className="text-red-500 text-sm"
+                                                >
+                                                    <i className="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <h4 className={`font-semibold text-lg mb-2 ${
+                                            goal.completed ? 'line-through text-gray-500' : ''
+                                        }`}>
+                                            {goal.title}
+                                        </h4>
+                                        
+                                        {goal.description && (
+                                            <p className="text-gray-600 text-sm mb-3">{goal.description}</p>
+                                        )}
+                                        
+                                        <div className="text-sm text-gray-500">
+                                            <p>Target: {goal.targetDate}</p>
+                                            <p className={
+                                                daysUntil < 0 ? 'text-red-600' :
+                                                daysUntil <= 7 ? 'text-orange-600' :
+                                                'text-green-600'
+                                            }>
+                                                {daysUntil < 0 ? `${Math.abs(daysUntil)} days overdue` :
+                                                 daysUntil === 0 ? 'Due today' :
+                                                 `${daysUntil} days left`}
+                                            </p>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {goals.length === 0 && (
+                            <div className="bg-white p-12 rounded-lg card-shadow text-center">
+                                <i className="fas fa-bullseye text-4xl text-gray-300 mb-4"></i>
+                                <h3 className="text-xl font-semibold text-gray-600 mb-2">No Goals Set</h3>
+                                <p className="text-gray-500">Add your first goal to start tracking your progress!</p>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            const RequirementsTracker = () => {
+                const updateRequirement = async (index, field, value) => {
+                    const req = requirements[index];
+                    const updates = { ...req, [field]: value };
+                    
+                    try {
+                        await api.put(`/requirements/${req.id}`, {
+                            name: updates.name,
+                            deadline: updates.deadline,
+                            status: updates.status,
+                            renewalMonths: updates.renewalMonths
+                        });
+                        
+                        const updated = requirements.map((r, i) => 
+                            i === index ? updates : r
+                        );
+                        setRequirements(updated);
+                    } catch (err) {
+                        console.error('Error updating requirement:', err);
+                    }
+                };
+
+                const addCustomRequirement = async () => {
+                    const newReq = {
+                        name: 'Custom Requirement',
+                        deadline: new Date().toISOString().split('T')[0],
+                        status: 'pending',
+                        renewalMonths: 12
+                    };
+                    
+                    try {
+                        const result = await api.post('/requirements', newReq);
+                        setRequirements([...requirements, { ...newReq, id: result.id }]);
+                    } catch (err) {
+                        console.error('Error adding requirement:', err);
+                    }
+                };
+
+                const deleteRequirement = async (index) => {
+                    const req = requirements[index];
+                    try {
+                        await api.delete(`/requirements/${req.id}`);
+                        setRequirements(requirements.filter((_, i) => i !== index));
+                    } catch (err) {
+                        console.error('Error deleting requirement:', err);
+                    }
+                };
+
+                return (
+                    <div className="space-y-6">
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-xl font-semibold">Clinical Placement Requirements</h3>
+                                <button
+                                    onClick={addCustomRequirement}
+                                    className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                                >
+                                    Add Custom Requirement
+                                </button>
+                            </div>
+                            
+                            <div className="bg-blue-50 p-4 rounded-lg mb-6">
+                                <h4 className="font-semibold text-blue-800 mb-2">Synergy Gateway Information</h4>
+                                <p className="text-sm text-blue-700 mb-2">
+                                    Review Fee: $50.50 + tax | Follow-up Fee: $10.00 + tax
+                                </p>
+                                <p className="text-xs text-blue-600">
+                                    All requirements must be submitted through the Verified platform before clinical placement begins.
+                                </p>
+                            </div>
+
+                            <div className="grid gap-4">
+                                {requirements.map((req, index) => {
+                                    const daysUntil = getDaysUntil(req.deadline);
+                                    return (
+                                        <div key={index} className={`p-4 border rounded-lg ${
+                                            req.status === 'completed' ? 'bg-green-50 border-green-200' :
+                                            daysUntil <= 7 ? 'bg-red-50 border-red-200' :
+                                            daysUntil <= 30 ? 'bg-yellow-50 border-yellow-200' :
+                                            'bg-gray-50 border-gray-200'
+                                        }`}>
+                                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+                                                <div>
+                                                    <input
+                                                        type="text"
+                                                        value={req.name}
+                                                        onChange={(e) => updateRequirement(index, 'name', e.target.value)}
+                                                        className="w-full p-2 border rounded font-medium"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <input
+                                                        type="date"
+                                                        value={req.deadline}
+                                                        onChange={(e) => updateRequirement(index, 'deadline', e.target.value)}
+                                                        className="w-full p-2 border rounded"
+                                                    />
+                                                    <p className={`text-xs mt-1 ${
+                                                        daysUntil < 0 ? 'text-red-600' :
+                                                        daysUntil <= 7 ? 'text-orange-600' :
+                                                        'text-gray-500'
+                                                    }`}>
+                                                        {daysUntil < 0 ? `${Math.abs(daysUntil)} days overdue` :
+                                                         daysUntil === 0 ? 'Due today' :
+                                                         `${daysUntil} days left`}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <select
+                                                        value={req.status}
+                                                        onChange={(e) => updateRequirement(index, 'status', e.target.value)}
+                                                        className="w-full p-2 border rounded"
+                                                    >
+                                                        <option value="pending">Pending</option>
+                                                        <option value="in-progress">In Progress</option>
+                                                        <option value="completed">Completed</option>
+                                                        <option value="expired">Expired</option>
+                                                    </select>
+                                                </div>
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-sm text-gray-600">
+                                                        Renews every {req.renewalMonths} months
+                                                    </span>
+                                                    <button
+                                                        onClick={() => deleteRequirement(index)}
+                                                        className="text-red-500 hover:text-red-700"
+                                                    >
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-lg card-shadow">
+                            <h3 className="text-xl font-semibold mb-4">Math Test Preparation</h3>
+                            <div className="bg-orange-50 p-4 rounded-lg mb-4">
+                                <h4 className="font-semibold text-orange-800 mb-2">Year 2 Math Test Requirements</h4>
+                                <ul className="text-sm text-orange-700 space-y-1">
+                                    <li>• Score required: 18/20 (90%)</li>
+                                    <li>• Topics: Insulin calculations, Hypoglycemia protocols</li>
+                                    <li>• Hands-on component: Drawing up doses, calculating drip rates</li>
+                                    <li>• Date: September 4-5, 2025 (orientation day)</li>
+                                </ul>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="text-center p-4 bg-blue-50 rounded">
+                                    <i className="fas fa-calculator text-2xl text-blue-500 mb-2"></i>
+                                    <h4 className="font-semibold">Practice Math</h4>
+                                    <p className="text-sm text-gray-600">Review dosage calculations</p>
+                                </div>
+                                <div className="text-center p-4 bg-green-50 rounded">
+                                    <i className="fas fa-syringe text-2xl text-green-500 mb-2"></i>
+                                    <h4 className="font-semibold">Insulin Orders</h4>
+                                    <p className="text-sm text-gray-600">Study insulin protocols</p>
+                                </div>
+                                <div className="text-center p-4 bg-purple-50 rounded">
+                                    <i className="fas fa-heartbeat text-2xl text-purple-500 mb-2"></i>
+                                    <h4 className="font-semibold">Hypoglycemia</h4>
+                                    <p className="text-sm text-gray-600">Review emergency protocols</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const tabs = [
+                { id: 'dashboard', label: 'Dashboard', icon: 'fas fa-home' },
+                { id: 'assignments', label: 'Assignments', icon: 'fas fa-book' },
+                { id: 'clinical', label: 'Clinical', icon: 'fas fa-hospital' },
+                { id: 'calendar', label: 'Calendar', icon: 'fas fa-calendar' },
+                { id: 'grades', label: 'Grades', icon: 'fas fa-chart-line' },
+                { id: 'requirements', label: 'Requirements', icon: 'fas fa-clipboard-check' },
+                { id: 'study', label: 'Study', icon: 'fas fa-graduation-cap' },
+                { id: 'goals', label: 'Goals', icon: 'fas fa-bullseye' }
+            ];
+
+            const renderActiveTab = () => {
+                switch (activeTab) {
+                    case 'dashboard': return <Dashboard />;
+                    case 'assignments': return <AssignmentTracker />;
+                    case 'clinical': return <ClinicalTracker />;
+                    case 'calendar': return <Calendar />;
+                    case 'grades': return <GradesTracker />;
+                    case 'requirements': return <RequirementsTracker />;
+                    case 'study': return <StudyPlanner />;
+                    case 'goals': return <GoalsTracker />;
+                    default: return <Dashboard />;
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    <header className="bg-white shadow-sm border-b">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex justify-between items-center py-4">
+                                <div className="flex items-center">
+                                    <img src="favicon_io/apple-touch-icon.png" alt="Nursing Logo" className="w-8 h-8 mr-3" />
+                                    <h1 className="text-2xl font-bold text-gray-900">
+                                        St. Clair Nursing Organizer
+                                    </h1>
+                                </div>
+                                <div className="text-sm text-gray-600">
+                                    Semester {currentSemester} • Practical Nursing Program
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <nav className="bg-white shadow-sm">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex space-x-4 overflow-x-auto">
+                                {tabs.map(tab => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`flex items-center px-3 py-4 text-sm font-medium border-b-2 whitespace-nowrap ${
+                                            activeTab === tab.id
+                                                ? 'border-purple-500 text-purple-600'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        <i className={`${tab.icon} mr-2`}></i>
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </nav>
+
+                    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                        {renderActiveTab()}
+                    </main>
+
+                    <footer className="bg-white border-t mt-12">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                            <div className="text-center text-sm text-gray-500 space-y-2">
+                                <div>Made with ❤️ for your nursing school success</div>
+                                <div>
+                                    <span className="inline-flex items-center px-2 py-1 rounded text-xs bg-green-100 text-green-800 mr-2">
+                                        <i className="fas fa-database mr-1"></i>
+                                        Database Connected
+                                    </span>
+                                    Data synced across all browsers and devices
+                                </div>
+                            </div>
+                        </div>
+                    </footer>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
