@@ -252,7 +252,7 @@
         };
 
         // API Configuration
-        const API_BASE = 'http://localhost:5000/api';
+        const API_BASE = 'http://localhost:5008/api';
 
         // API Helper Functions
         const api = {
@@ -2787,6 +2787,7 @@
                 { id: 'grades', label: 'Grades', icon: 'fas fa-chart-line' },
                 { id: 'requirements', label: 'Requirements', icon: 'fas fa-clipboard-check' },
                 { id: 'study', label: 'Study', icon: 'fas fa-graduation-cap' },
+                { id: 'ai-test', label: 'AI Test Gen', icon: 'fas fa-robot' },
                 { id: 'goals', label: 'Goals', icon: 'fas fa-bullseye' },
                 { id: 'wellness', label: 'Wellness', icon: 'fas fa-heart' }
             ];
@@ -2800,10 +2801,1309 @@
                     case 'grades': return <GradesTracker />;
                     case 'requirements': return <RequirementsTracker />;
                     case 'study': return <StudyPlanner />;
+                    case 'ai-test': return <AITestGenerator />;
                     case 'goals': return <GoalsTracker />;
                     case 'wellness': return <WellnessTracker />;
                     default: return <Dashboard />;
                 }
+            };
+
+            // AI Test Generator Component
+            const AITestGenerator = () => {
+                const [files, setFiles] = useState([]);
+                const [prompt, setPrompt] = useState('');
+                const [isGenerating, setIsGenerating] = useState(false);
+                const [generatedTest, setGeneratedTest] = useState(null);
+                const [generatedSolutions, setGeneratedSolutions] = useState(null);
+                const [error, setError] = useState('');
+                const [activeView, setActiveView] = useState('saved-tests'); // 'upload', 'test', 'solutions', 'take-test', 'results', 'saved-tests', 'analytics'
+
+                // Test taking state
+                const [parsedQuestions, setParsedQuestions] = useState([]);
+                const [userAnswers, setUserAnswers] = useState({});
+                const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+                const [testSubmitted, setTestSubmitted] = useState(false);
+                const [testResults, setTestResults] = useState(null);
+
+                // New state for enhanced features
+                const [savedTests, setSavedTests] = useState([]);
+                const [currentTestId, setCurrentTestId] = useState(null);
+                const [currentAttemptId, setCurrentAttemptId] = useState(null);
+                const [testMode, setTestMode] = useState(null); // 'exam' or 'practice'
+                const [timerDuration, setTimerDuration] = useState(60); // minutes
+                const [timeRemaining, setTimeRemaining] = useState(null); // seconds
+                const [testStartTime, setTestStartTime] = useState(null);
+                const [showModeModal, setShowModeModal] = useState(false);
+                const [showSaveModal, setShowSaveModal] = useState(false);
+                const [testTitle, setTestTitle] = useState('');
+                const [showFeedback, setShowFeedback] = useState(false);
+                const [currentQuestionFeedback, setCurrentQuestionFeedback] = useState(null);
+                const [testAnalytics, setTestAnalytics] = useState(null);
+
+                const handleFileChange = (e) => {
+                    const selectedFiles = Array.from(e.target.files);
+                    setFiles(selectedFiles);
+                    setError('');
+                };
+
+                const handleGenerateTest = async () => {
+                    if (files.length === 0) {
+                        setError('Please upload at least one study material file');
+                        return;
+                    }
+
+                    setIsGenerating(true);
+                    setError('');
+                    setGeneratedTest(null);
+                    setGeneratedSolutions(null);
+
+                    try {
+                        const formData = new FormData();
+                        files.forEach(file => {
+                            formData.append('files', file);
+                        });
+                        formData.append('prompt', prompt || 'Generate a comprehensive practice test based on these materials');
+
+                        const response = await fetch(`${API_BASE}/generate-test`, {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.error || 'Failed to generate test');
+                        }
+
+                        const data = await response.json();
+                        setGeneratedTest(data.test);
+                        setGeneratedSolutions(data.solutions);
+                        setActiveView('test');
+                    } catch (err) {
+                        setError(err.message);
+                    } finally {
+                        setIsGenerating(false);
+                    }
+                };
+
+                const downloadAsMarkdown = (content, filename) => {
+                    const blob = new Blob([content], { type: 'text/markdown' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                };
+
+                const parseTestQuestions = (testText, solutionsText) => {
+                    // Simple parser for multiple choice, true/false, and short answer questions
+                    const questions = [];
+                    const lines = testText.split('\n');
+                    const solutionLines = solutionsText.split('\n');
+
+                    let currentQuestion = null;
+                    let questionNumber = 0;
+
+                    lines.forEach((line, idx) => {
+                        line = line.trim();
+
+                        // Detect question (starts with number followed by period or parenthesis)
+                        const questionMatch = line.match(/^(\d+)[\.\)]\s+(.+)/);
+                        if (questionMatch) {
+                            if (currentQuestion) {
+                                questions.push(currentQuestion);
+                            }
+                            questionNumber = parseInt(questionMatch[1]);
+                            currentQuestion = {
+                                number: questionNumber,
+                                question: questionMatch[2],
+                                options: [],
+                                type: 'multiple-choice',
+                                correctAnswer: null
+                            };
+                        }
+                        // Detect options (A), B), C), D) format or - A) format
+                        else if (currentQuestion && line.match(/^[\-\s]*[A-F][\)\.]?\s+/)) {
+                            const optionMatch = line.match(/^[\-\s]*([A-F])[\)\.]?\s+(.+)/);
+                            if (optionMatch) {
+                                currentQuestion.options.push({
+                                    letter: optionMatch[1],
+                                    text: optionMatch[2]
+                                });
+                            }
+                        }
+                        // Detect T/F questions
+                        else if (currentQuestion && line.includes('(T/F)')) {
+                            currentQuestion.type = 'true-false';
+                            currentQuestion.options = [{letter: 'T', text: 'True'}, {letter: 'F', text: 'False'}];
+                        }
+                    });
+
+                    if (currentQuestion) {
+                        questions.push(currentQuestion);
+                    }
+
+                    // Extract correct answers from solutions
+                    solutionLines.forEach(line => {
+                        // Remove markdown formatting (**, *, _, etc) and trim
+                        const cleanLine = line.replace(/[\*\_\~]/g, '').trim();
+
+                        // Try multiple patterns to extract answers
+                        // Pattern 1: "1. Answer: B" or "1) Answer: B" (with optional markdown)
+                        let answerMatch = cleanLine.match(/^(\d+)[\.\)]\s*(?:Answer:\s*)?\s*([A-F])\b/i);
+
+                        // Pattern 2: "1. Correct answer: B" or similar
+                        if (!answerMatch) {
+                            answerMatch = cleanLine.match(/^(\d+)[\.\)]\s*(?:Correct\s*)?(?:Answer|Choice):\s*([A-F])\b/i);
+                        }
+
+                        // Pattern 3: Just number and letter
+                        if (!answerMatch) {
+                            answerMatch = cleanLine.match(/^(\d+)[\.\)]\s*([A-F])[\.\)\s\-\–]/i);
+                        }
+
+                        // Pattern 4: For True/False
+                        if (!answerMatch) {
+                            answerMatch = cleanLine.match(/^(\d+)[\.\)]\s*(?:Answer:\s*)?(True|False|T|F)\b/i);
+                        }
+
+                        if (answerMatch) {
+                            const qNum = parseInt(answerMatch[1]);
+                            const answer = answerMatch[2].toUpperCase();
+                            const question = questions.find(q => q.number === qNum);
+                            if (question) {
+                                question.correctAnswer = answer.startsWith('T') ? 'T' : answer.startsWith('F') ? 'F' : answer;
+                            }
+                        }
+                    });
+
+                    return questions;
+                };
+
+                const startInteractiveTest = async () => {
+                    // Check if there's a saved test first, and if so, check for incomplete attempts
+                    if (currentTestId) {
+                        try {
+                            const attempts = await api.get(`/tests/${currentTestId}/attempts`);
+                            const incompleteAttempt = attempts.find(a => a.mode === 'practice' && !a.completed);
+
+                            if (incompleteAttempt) {
+                                // Automatically resume the incomplete practice attempt
+                                setCurrentAttemptId(incompleteAttempt.id);
+                                setTestMode('practice');
+
+                                // Load saved answers
+                                const savedAnswers = await api.get(`/tests/attempts/${incompleteAttempt.id}/answers`);
+                                const answerMap = {};
+                                savedAnswers.forEach(a => {
+                                    answerMap[a.question_number] = a.user_answer;
+                                });
+
+                                // Parse and restore test state
+                                const questions = parseTestQuestions(generatedTest, generatedSolutions);
+                                setParsedQuestions(questions);
+                                setUserAnswers(answerMap);
+                                setCurrentQuestionIndex(Object.keys(answerMap).length > 0 ? Math.max(...Object.keys(answerMap).map(Number)) : 0);
+                                setTestStartTime(new Date(incompleteAttempt.started_at).getTime());
+                                setTestSubmitted(false);
+                                setTestResults(null);
+                                setActiveView('take-test');
+                                return;
+                            }
+                        } catch (err) {
+                            console.error('Failed to check for incomplete attempts:', err);
+                        }
+                    }
+
+                    // Start fresh test (no saved test or no incomplete attempts)
+                    const questions = parseTestQuestions(generatedTest, generatedSolutions);
+                    setParsedQuestions(questions);
+                    setUserAnswers({});
+                    setCurrentQuestionIndex(0);
+                    setTestSubmitted(false);
+                    setTestResults(null);
+                    setTestMode(null); // Reset mode for fresh start
+                    setActiveView('take-test');
+                };
+
+                const handleAnswerSelect = (questionNumber, answer) => {
+                    setUserAnswers(prev => ({
+                        ...prev,
+                        [questionNumber]: answer
+                    }));
+                };
+
+                const submitTest = async () => {
+                    let correct = 0;
+                    let total = parsedQuestions.length;
+
+                    const results = parsedQuestions.map(q => {
+                        const userAnswer = userAnswers[q.number];
+                        const isCorrect = userAnswer === q.correctAnswer;
+                        if (isCorrect) correct++;
+
+                        return {
+                            ...q,
+                            userAnswer,
+                            isCorrect
+                        };
+                    });
+
+                    // Calculate time spent
+                    const timeSpent = testStartTime ? Math.floor((Date.now() - testStartTime) / 1000) : 0;
+
+                    // Save to database if this is part of a saved test
+                    if (currentAttemptId) {
+                        try {
+                            await api.post(`/tests/attempts/${currentAttemptId}/submit`, {
+                                score: correct,
+                                total: total,
+                                timeSpent: timeSpent,
+                                answers: results.map(r => ({
+                                    questionNumber: r.number,
+                                    userAnswer: r.userAnswer,
+                                    correctAnswer: r.correctAnswer,
+                                    isCorrect: r.isCorrect
+                                }))
+                            });
+                        } catch (err) {
+                            console.error('Failed to save test results:', err);
+                        }
+                    }
+
+                    setTestResults({
+                        score: correct,
+                        total: total,
+                        percentage: Math.round((correct / total) * 100),
+                        questions: results,
+                        timeSpent: timeSpent
+                    });
+                    setTestSubmitted(true);
+                    setActiveView('results');
+                    setTimeRemaining(null); // Stop timer
+                };
+
+                // Load saved tests on mount
+                useEffect(() => {
+                    loadSavedTests();
+                }, []);
+
+                // Timer effect
+                useEffect(() => {
+                    if (timeRemaining !== null && timeRemaining > 0 && testMode === 'exam') {
+                        const timer = setInterval(() => {
+                            setTimeRemaining(prev => {
+                                if (prev <= 1) {
+                                    clearInterval(timer);
+                                    submitTest(); // Auto-submit when time runs out
+                                    return 0;
+                                }
+                                return prev - 1;
+                            });
+                        }, 1000);
+
+                        return () => clearInterval(timer);
+                    }
+                }, [timeRemaining, testMode]);
+
+                // Warn before leaving exam mode
+                useEffect(() => {
+                    const handleBeforeUnload = (e) => {
+                        if (activeView === 'take-test' && testMode === 'exam' && !testSubmitted) {
+                            e.preventDefault();
+                            e.returnValue = '';
+                            return '';
+                        }
+                    };
+
+                    window.addEventListener('beforeunload', handleBeforeUnload);
+                    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+                }, [activeView, testMode, testSubmitted]);
+
+                const loadSavedTests = async () => {
+                    try {
+                        const tests = await api.get('/tests');
+                        setSavedTests(tests);
+                    } catch (err) {
+                        console.error('Failed to load saved tests:', err);
+                    }
+                };
+
+                const saveTest = async () => {
+                    if (!testTitle.trim()) {
+                        setError('Please enter a test title');
+                        return;
+                    }
+
+                    try {
+                        const response = await api.post('/tests/save', {
+                            title: testTitle,
+                            test: generatedTest,
+                            solutions: generatedSolutions,
+                            questionCount: parsedQuestions.length || parseTestQuestions(generatedTest, generatedSolutions).length
+                        });
+
+                        setCurrentTestId(response.id);
+                        setShowSaveModal(false);
+                        setTestTitle('');
+                        await loadSavedTests();
+                        alert('Test saved successfully!');
+                    } catch (err) {
+                        setError('Failed to save test: ' + err.message);
+                    }
+                };
+
+                const deleteTest = async (testId) => {
+                    if (!confirm('Are you sure you want to delete this test? All attempts will be lost.')) {
+                        return;
+                    }
+
+                    try {
+                        await api.delete(`/tests/${testId}`);
+                        await loadSavedTests();
+                    } catch (err) {
+                        setError('Failed to delete test: ' + err.message);
+                    }
+                };
+
+                const startSavedTest = async (testId) => {
+                    try {
+                        // Load test content
+                        const test = await api.get(`/tests/${testId}`);
+                        setGeneratedTest(test.test_content);
+                        setGeneratedSolutions(test.solutions_content);
+                        setCurrentTestId(testId);
+
+                        // Show mode selection modal
+                        setShowModeModal(true);
+                    } catch (err) {
+                        setError('Failed to load test: ' + err.message);
+                    }
+                };
+
+                const confirmTestMode = async () => {
+                    if (!testMode) {
+                        setError('Please select a test mode');
+                        return;
+                    }
+
+                    try {
+                        // Check for existing incomplete practice attempt
+                        if (testMode === 'practice') {
+                            const attempts = await api.get(`/tests/${currentTestId}/attempts`);
+                            const incompleteAttempt = attempts.find(a => a.mode === 'practice' && !a.completed);
+
+                            if (incompleteAttempt) {
+                                // Resume existing attempt
+                                const shouldResume = confirm('You have an incomplete practice attempt. Would you like to resume it?');
+                                if (shouldResume) {
+                                    setCurrentAttemptId(incompleteAttempt.id);
+                                    setShowModeModal(false);
+
+                                    // Load saved answers
+                                    const savedAnswers = await api.get(`/tests/attempts/${incompleteAttempt.id}/answers`);
+                                    const answerMap = {};
+                                    savedAnswers.forEach(a => {
+                                        answerMap[a.question_number] = a.user_answer;
+                                    });
+
+                                    // Parse and restore test state
+                                    const questions = parseTestQuestions(generatedTest, generatedSolutions);
+                                    setParsedQuestions(questions);
+                                    setUserAnswers(answerMap);
+                                    setCurrentQuestionIndex(Object.keys(answerMap).length > 0 ? Math.max(...Object.keys(answerMap).map(Number)) : 0);
+                                    setTestStartTime(new Date(incompleteAttempt.started_at).getTime());
+                                    setActiveView('take-test');
+                                    return;
+                                }
+                            }
+                        }
+
+                        // Create test attempt
+                        const response = await api.post(`/tests/${currentTestId}/start`, {
+                            mode: testMode,
+                            timerDuration: testMode === 'exam' && timeRemaining ? timerDuration : null
+                        });
+
+                        setCurrentAttemptId(response.id);
+                        setShowModeModal(false);
+
+                        // Parse and start test
+                        const questions = parseTestQuestions(generatedTest, generatedSolutions);
+                        setParsedQuestions(questions);
+                        setUserAnswers({});
+                        setCurrentQuestionIndex(0);
+                        setTestStartTime(Date.now());
+
+                        // Set timer for exam mode
+                        if (testMode === 'exam' && timerDuration > 0) {
+                            setTimeRemaining(timerDuration * 60); // Convert minutes to seconds
+                        }
+
+                        setActiveView('take-test');
+                    } catch (err) {
+                        setError('Failed to start test: ' + err.message);
+                    }
+                };
+
+                const handleNextQuestion = async () => {
+                    // In practice mode, show feedback before moving
+                    if (testMode === 'practice' && !showFeedback) {
+                        const currentQ = parsedQuestions[currentQuestionIndex];
+                        const userAnswer = userAnswers[currentQ.number];
+                        const isCorrect = userAnswer === currentQ.correctAnswer;
+
+                        setCurrentQuestionFeedback({
+                            isCorrect: isCorrect,
+                            correctAnswer: currentQ.correctAnswer,
+                            userAnswer: userAnswer
+                        });
+                        setShowFeedback(true);
+
+                        // Save answer to database in practice mode
+                        if (currentAttemptId) {
+                            try {
+                                await api.put(`/tests/attempts/${currentAttemptId}`, {
+                                    questionNumber: currentQ.number,
+                                    answer: userAnswer,
+                                    correctAnswer: currentQ.correctAnswer,
+                                    isCorrect: isCorrect
+                                });
+                            } catch (err) {
+                                console.error('Failed to save answer:', err);
+                            }
+                        }
+                    } else {
+                        // Move to next question
+                        setShowFeedback(false);
+                        setCurrentQuestionFeedback(null);
+                        if (currentQuestionIndex < parsedQuestions.length - 1) {
+                            setCurrentQuestionIndex(currentQuestionIndex + 1);
+                        }
+                    }
+                };
+
+                const viewAnalytics = async (testId) => {
+                    try {
+                        const analytics = await api.get(`/tests/${testId}/analytics`);
+                        setTestAnalytics(analytics);
+                        setCurrentTestId(testId);
+                        setActiveView('analytics');
+                    } catch (err) {
+                        setError('Failed to load analytics: ' + err.message);
+                    }
+                };
+
+                const formatTime = (seconds) => {
+                    const mins = Math.floor(seconds / 60);
+                    const secs = seconds % 60;
+                    return `${mins}:${secs.toString().padStart(2, '0')}`;
+                };
+
+                const handleNavigation = (newView) => {
+                    // Warn if leaving exam mode
+                    if (activeView === 'take-test' && testMode === 'exam' && !testSubmitted) {
+                        const confirmed = confirm(
+                            'Leaving this exam will end your attempt and the timer will stop. ' +
+                            'You will need to restart the exam from the beginning. ' +
+                            'Are you sure you want to leave?'
+                        );
+                        if (!confirmed) {
+                            return;
+                        }
+                        // Stop timer and reset test state
+                        setTimeRemaining(null);
+                        setTestMode(null);
+                        setCurrentAttemptId(null);
+                        setParsedQuestions([]);
+                        setUserAnswers({});
+                        setCurrentQuestionIndex(0);
+                    }
+                    setActiveView(newView);
+                };
+
+                const restartTest = async () => {
+                    const confirmed = confirm(
+                        'Are you sure you want to restart this test? All progress will be lost and you will start from question 1.'
+                    );
+                    if (!confirmed) {
+                        return;
+                    }
+
+                    // If it's a saved test with an attempt, delete it first before resetting state
+                    if (currentAttemptId) {
+                        try {
+                            await api.delete(`/tests/attempts/${currentAttemptId}`);
+                        } catch (err) {
+                            console.error('Failed to delete attempt:', err);
+                        }
+                        setCurrentAttemptId(null);
+                    }
+
+                    // Reset all test state
+                    setUserAnswers({});
+                    setCurrentQuestionIndex(0);
+                    setShowFeedback(false);
+                    setCurrentQuestionFeedback(null);
+                    setTestSubmitted(false);
+                    setTestResults(null);
+                    setTimeRemaining(null);
+                    setTestStartTime(Date.now());
+                    setTestMode(null);
+
+                    // Show mode selection for saved tests, or just restart for generated tests
+                    if (currentTestId) {
+                        setShowModeModal(true);
+                    }
+                };
+
+                return (
+                    <div className="space-y-6">
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6 rounded-lg shadow-lg">
+                            <h2 className="text-2xl md:text-3xl font-bold mb-2">
+                                <i className="fas fa-robot mr-3"></i>
+                                AI Test Generator
+                            </h2>
+                            <p className="text-purple-100">Upload your study materials and get a practice test with solutions</p>
+                        </div>
+
+                        {/* Tab Navigation */}
+                        <div className="bg-white rounded-lg shadow-sm p-2">
+                            <div className="flex space-x-2 overflow-x-auto">
+                                <button
+                                    onClick={() => handleNavigation('saved-tests')}
+                                    className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
+                                        activeView === 'saved-tests'
+                                            ? 'bg-purple-600 text-white'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    <i className="fas fa-folder-open mr-2"></i>
+                                    My Tests
+                                </button>
+                                <button
+                                    onClick={() => handleNavigation('upload')}
+                                    className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
+                                        activeView === 'upload'
+                                            ? 'bg-purple-600 text-white'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    <i className="fas fa-upload mr-2"></i>
+                                    <span className="hidden sm:inline">Upload</span>
+                                </button>
+                                <button
+                                    onClick={() => handleNavigation('test')}
+                                    disabled={!generatedTest}
+                                    className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
+                                        activeView === 'test'
+                                            ? 'bg-purple-600 text-white'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed'
+                                    }`}
+                                >
+                                    <i className="fas fa-file-alt mr-2"></i>
+                                    <span className="hidden sm:inline">Test</span>
+                                </button>
+                                <button
+                                    onClick={startInteractiveTest}
+                                    disabled={!generatedTest || !generatedSolutions}
+                                    className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
+                                        activeView === 'take-test' || activeView === 'results'
+                                            ? 'bg-green-600 text-white'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed'
+                                    }`}
+                                >
+                                    <i className="fas fa-play-circle mr-2"></i>
+                                    <span className="hidden sm:inline">Take</span>
+                                </button>
+                                <button
+                                    onClick={() => handleNavigation('solutions')}
+                                    disabled={!generatedSolutions}
+                                    className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
+                                        activeView === 'solutions'
+                                            ? 'bg-purple-600 text-white'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed'
+                                    }`}
+                                >
+                                    <i className="fas fa-check-circle mr-2"></i>
+                                    <span className="hidden sm:inline">Solutions</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Saved Tests View */}
+                        {activeView === 'saved-tests' && (
+                            <div className="space-y-6">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-xl font-bold text-gray-900">My Saved Tests</h3>
+                                    <button
+                                        onClick={() => handleNavigation('upload')}
+                                        className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+                                    >
+                                        <i className="fas fa-plus mr-2"></i>
+                                        Create New Test
+                                    </button>
+                                </div>
+
+                                {savedTests.length === 0 ? (
+                                    <div className="bg-white rounded-lg shadow-md p-12 text-center">
+                                        <i className="fas fa-folder-open text-6xl text-gray-300 mb-4"></i>
+                                        <h3 className="text-xl font-semibold text-gray-700 mb-2">No saved tests yet</h3>
+                                        <p className="text-gray-500 mb-6">Upload study materials to generate your first practice test</p>
+                                        <button
+                                            onClick={() => handleNavigation('upload')}
+                                            className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors"
+                                        >
+                                            <i className="fas fa-upload mr-2"></i>
+                                            Upload Materials
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {savedTests.map(test => (
+                                            <div key={test.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <h4 className="text-lg font-bold text-gray-900 flex-1">{test.title}</h4>
+                                                    <button
+                                                        onClick={() => deleteTest(test.id)}
+                                                        className="text-red-600 hover:text-red-800 ml-2"
+                                                        title="Delete test"
+                                                    >
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                                <div className="space-y-2 text-sm text-gray-600 mb-4">
+                                                    <p><i className="fas fa-question-circle mr-2"></i>{test.question_count} questions</p>
+                                                    <p><i className="fas fa-clock mr-2"></i>Created {new Date(test.created_at).toLocaleDateString()}</p>
+                                                    {test.attempt_count > 0 && (
+                                                        <>
+                                                            <p><i className="fas fa-chart-line mr-2"></i>Best Score: {test.best_score}%</p>
+                                                            <p><i className="fas fa-redo mr-2"></i>{test.attempt_count} attempts</p>
+                                                        </>
+                                                    )}
+                                                </div>
+                                                <div className="flex space-x-2">
+                                                    <button
+                                                        onClick={() => startSavedTest(test.id)}
+                                                        className="flex-1 bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                                                    >
+                                                        <i className="fas fa-play mr-2"></i>
+                                                        Start Test
+                                                    </button>
+                                                    {test.attempt_count > 0 && (
+                                                        <button
+                                                            onClick={() => viewAnalytics(test.id)}
+                                                            className="bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+                                                        >
+                                                            <i className="fas fa-chart-bar"></i>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Upload View */}
+                        {activeView === 'upload' && (
+                            <div className="bg-white rounded-lg shadow-md p-6 space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Upload Study Materials
+                                    </label>
+                                    <p className="text-sm text-gray-500 mb-3">
+                                        Supported formats: PDF, DOCX, PPTX, TXT, MD
+                                    </p>
+                                    <input
+                                        type="file"
+                                        multiple
+                                        accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md"
+                                        onChange={handleFileChange}
+                                        className="block w-full text-sm text-gray-500
+                                            file:mr-4 file:py-2 file:px-4
+                                            file:rounded-full file:border-0
+                                            file:text-sm file:font-semibold
+                                            file:bg-purple-50 file:text-purple-700
+                                            hover:file:bg-purple-100
+                                            cursor-pointer"
+                                    />
+                                    {files.length > 0 && (
+                                        <div className="mt-3">
+                                            <p className="text-sm font-medium text-gray-700 mb-2">Selected files:</p>
+                                            <ul className="text-sm text-gray-600 space-y-1">
+                                                {files.map((file, idx) => (
+                                                    <li key={idx} className="flex items-center">
+                                                        <i className="fas fa-file mr-2 text-purple-600"></i>
+                                                        {file.name} ({(file.size / 1024).toFixed(2)} KB)
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Custom Instructions (Optional)
+                                    </label>
+                                    <textarea
+                                        value={prompt}
+                                        onChange={(e) => setPrompt(e.target.value)}
+                                        placeholder="E.g., Create 100 questions covering all chapters. Include 70 multiple choice, 20 true/false, and 10 short answer questions. Focus on anatomy, physiology, and clinical applications."
+                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                        rows="3"
+                                    />
+                                </div>
+
+                                {error && (
+                                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                                        <i className="fas fa-exclamation-circle mr-2"></i>
+                                        {error}
+                                    </div>
+                                )}
+
+                                <button
+                                    onClick={handleGenerateTest}
+                                    disabled={isGenerating || files.length === 0}
+                                    className="w-full bg-purple-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    {isGenerating ? (
+                                        <>
+                                            <i className="fas fa-spinner fa-spin mr-2"></i>
+                                            Generating Test... (This may take 2-5 minutes for 100+ questions)
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="fas fa-magic mr-2"></i>
+                                            Generate Practice Test
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Test View */}
+                        {activeView === 'test' && generatedTest && (
+                            <div className="bg-white rounded-lg shadow-md p-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-xl font-bold text-gray-900">Practice Test</h3>
+                                    <div className="flex space-x-2">
+                                        <button
+                                            onClick={() => setShowSaveModal(true)}
+                                            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                                        >
+                                            <i className="fas fa-save mr-2"></i>
+                                            Save Test
+                                        </button>
+                                        <button
+                                            onClick={() => downloadAsMarkdown(generatedTest, 'practice-test.md')}
+                                            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+                                        >
+                                            <i className="fas fa-download mr-2"></i>
+                                            Download
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="prose max-w-none">
+                                    <pre className="whitespace-pre-wrap font-sans text-gray-800 bg-gray-50 p-4 rounded-lg">
+                                        {generatedTest}
+                                    </pre>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Solutions View */}
+                        {activeView === 'solutions' && generatedSolutions && (
+                            <div className="bg-white rounded-lg shadow-md p-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-xl font-bold text-gray-900">Solution Sheet</h3>
+                                    <button
+                                        onClick={() => downloadAsMarkdown(generatedSolutions, 'solutions.md')}
+                                        className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+                                    >
+                                        <i className="fas fa-download mr-2"></i>
+                                        Download
+                                    </button>
+                                </div>
+                                <div className="prose max-w-none">
+                                    <pre className="whitespace-pre-wrap font-sans text-gray-800 bg-gray-50 p-4 rounded-lg">
+                                        {generatedSolutions}
+                                    </pre>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Take Test View */}
+                        {activeView === 'take-test' && parsedQuestions.length > 0 && (
+                            <div className="bg-white rounded-lg shadow-md p-6">
+                                <div className="mb-6">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <div>
+                                            <h3 className="text-xl font-bold text-gray-900">
+                                                {testMode === 'exam' ? 'Exam Mode' : 'Practice Mode'}
+                                            </h3>
+                                            <span className="text-sm text-gray-600">
+                                                Question {currentQuestionIndex + 1} of {parsedQuestions.length}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center space-x-3">
+                                            {testMode === 'exam' && timeRemaining !== null && (
+                                                <div className={`text-2xl font-bold ${timeRemaining < 300 ? 'text-red-600' : 'text-green-600'}`}>
+                                                    <i className="fas fa-clock mr-2"></i>
+                                                    {formatTime(timeRemaining)}
+                                                </div>
+                                            )}
+                                            <button
+                                                onClick={restartTest}
+                                                className="px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm"
+                                                title="Restart test from beginning"
+                                            >
+                                                <i className="fas fa-redo mr-1"></i>
+                                                Restart
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                                        <div
+                                            className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                                            style={{ width: `${((currentQuestionIndex + 1) / parsedQuestions.length) * 100}%` }}
+                                        ></div>
+                                    </div>
+                                </div>
+
+                                {parsedQuestions[currentQuestionIndex] && (
+                                    <div className="space-y-4">
+                                        <div className="bg-purple-50 p-4 rounded-lg">
+                                            <p className="text-lg font-medium text-gray-900">
+                                                Q{parsedQuestions[currentQuestionIndex].number}. {parsedQuestions[currentQuestionIndex].question}
+                                            </p>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            {parsedQuestions[currentQuestionIndex].options.map(option => (
+                                                <button
+                                                    key={option.letter}
+                                                    onClick={() => handleAnswerSelect(parsedQuestions[currentQuestionIndex].number, option.letter)}
+                                                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                                                        userAnswers[parsedQuestions[currentQuestionIndex].number] === option.letter
+                                                            ? 'border-purple-600 bg-purple-50'
+                                                            : 'border-gray-200 hover:border-purple-300 hover:bg-gray-50'
+                                                    }`}
+                                                >
+                                                    <span className="font-bold text-purple-600 mr-3">{option.letter})</span>
+                                                    <span>{option.text}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        {/* Practice Mode Feedback */}
+                                        {testMode === 'practice' && showFeedback && currentQuestionFeedback && (
+                                            <div className={`p-4 rounded-lg ${currentQuestionFeedback.isCorrect ? 'bg-green-50 border-2 border-green-300' : 'bg-red-50 border-2 border-red-300'}`}>
+                                                <div className="flex items-start">
+                                                    <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
+                                                        currentQuestionFeedback.isCorrect ? 'bg-green-500' : 'bg-red-500'
+                                                    }`}>
+                                                        <i className={`fas ${currentQuestionFeedback.isCorrect ? 'fa-check' : 'fa-times'} text-white`}></i>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="font-bold text-lg mb-1">
+                                                            {currentQuestionFeedback.isCorrect ? 'Correct!' : 'Incorrect'}
+                                                        </p>
+                                                        {!currentQuestionFeedback.isCorrect && (
+                                                            <p className="text-sm">
+                                                                <span className="font-semibold">Correct answer: </span>
+                                                                {currentQuestionFeedback.correctAnswer}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="flex justify-between pt-4">
+                                            <button
+                                                onClick={() => {
+                                                    setShowFeedback(false);
+                                                    setCurrentQuestionFeedback(null);
+                                                    setCurrentQuestionIndex(Math.max(0, currentQuestionIndex - 1));
+                                                }}
+                                                disabled={currentQuestionIndex === 0 || (testMode === 'practice' && showFeedback)}
+                                                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                                <i className="fas fa-arrow-left mr-2"></i>
+                                                Previous
+                                            </button>
+
+                                            {currentQuestionIndex < parsedQuestions.length - 1 ? (
+                                                <button
+                                                    onClick={handleNextQuestion}
+                                                    className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                                                >
+                                                    {testMode === 'practice' && !showFeedback ? 'Check Answer' : 'Next'}
+                                                    <i className="fas fa-arrow-right ml-2"></i>
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={testMode === 'practice' && !showFeedback ? handleNextQuestion : submitTest}
+                                                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                                                >
+                                                    <i className="fas fa-check mr-2"></i>
+                                                    {testMode === 'practice' && !showFeedback ? 'Check & Submit' : 'Submit Test'}
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="pt-4 border-t">
+                                            <p className="text-sm text-gray-600 mb-2">Progress: {Object.keys(userAnswers).length} / {parsedQuestions.length} answered</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {parsedQuestions.map((q, idx) => {
+                                                    const hasAnswer = userAnswers[q.number];
+                                                    const isCorrect = hasAnswer && userAnswers[q.number] === q.correctAnswer;
+                                                    const isIncorrect = hasAnswer && userAnswers[q.number] !== q.correctAnswer;
+
+                                                    // In practice mode, show green/red feedback
+                                                    // In exam mode, just show answered status
+                                                    const bgColor = idx === currentQuestionIndex
+                                                        ? 'bg-purple-600 text-white'
+                                                        : testMode === 'practice' && isCorrect
+                                                        ? 'bg-green-500 text-white'
+                                                        : testMode === 'practice' && isIncorrect
+                                                        ? 'bg-red-500 text-white'
+                                                        : hasAnswer
+                                                        ? 'bg-blue-200 text-blue-800'
+                                                        : 'bg-gray-100 text-gray-600';
+
+                                                    return (
+                                                        <button
+                                                            key={q.number}
+                                                            onClick={() => {
+                                                                setShowFeedback(false);
+                                                                setCurrentQuestionFeedback(null);
+                                                                setCurrentQuestionIndex(idx);
+                                                            }}
+                                                            className={`w-10 h-10 rounded-lg font-medium transition-all ${bgColor}`}
+                                                        >
+                                                            {q.number}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Results View */}
+                        {activeView === 'results' && testResults && (
+                            <div className="space-y-6">
+                                <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-8 rounded-lg shadow-lg">
+                                    <h2 className="text-3xl font-bold mb-4">Test Results</h2>
+                                    <div className="flex items-baseline space-x-4">
+                                        <div className="text-6xl font-bold">{testResults.percentage}%</div>
+                                        <div className="text-2xl">
+                                            {testResults.score} / {testResults.total} correct
+                                        </div>
+                                    </div>
+                                    <p className="mt-4 text-green-100">
+                                        {testResults.percentage >= 90 ? 'Outstanding! 🎉' :
+                                         testResults.percentage >= 80 ? 'Great job! 👏' :
+                                         testResults.percentage >= 70 ? 'Good work! 👍' :
+                                         testResults.percentage >= 60 ? 'Keep practicing! 📚' :
+                                         'Review the material and try again! 💪'}
+                                    </p>
+                                </div>
+
+                                <div className="bg-white rounded-lg shadow-md p-6">
+                                    <h3 className="text-xl font-bold text-gray-900 mb-4">Detailed Review</h3>
+                                    <div className="space-y-4">
+                                        {testResults.questions.map((q) => (
+                                            <div key={q.number} className={`p-4 rounded-lg border-2 ${
+                                                q.isCorrect ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'
+                                            }`}>
+                                                <div className="flex items-start">
+                                                    <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
+                                                        q.isCorrect ? 'bg-green-500' : 'bg-red-500'
+                                                    }`}>
+                                                        <i className={`fas ${q.isCorrect ? 'fa-check' : 'fa-times'} text-white`}></i>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="font-medium text-gray-900 mb-2">
+                                                            Q{q.number}. {q.question}
+                                                        </p>
+                                                        <div className="text-sm space-y-1">
+                                                            <p>
+                                                                <span className="font-semibold">Your answer: </span>
+                                                                <span className={q.isCorrect ? 'text-green-700' : 'text-red-700'}>
+                                                                    {q.userAnswer || 'Not answered'}
+                                                                </span>
+                                                            </p>
+                                                            {!q.isCorrect && (
+                                                                <p>
+                                                                    <span className="font-semibold">Correct answer: </span>
+                                                                    <span className="text-green-700">{q.correctAnswer}</span>
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="flex space-x-4">
+                                    <button
+                                        onClick={startInteractiveTest}
+                                        className="flex-1 bg-purple-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-purple-700 transition-colors"
+                                    >
+                                        <i className="fas fa-redo mr-2"></i>
+                                        Retake Test
+                                    </button>
+                                    <button
+                                        onClick={() => handleNavigation('solutions')}
+                                        className="flex-1 bg-green-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-700 transition-colors"
+                                    >
+                                        <i className="fas fa-book mr-2"></i>
+                                        View Full Solutions
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Analytics View */}
+                        {activeView === 'analytics' && testAnalytics && (
+                            <div className="space-y-6">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-2xl font-bold text-gray-900">Test Analytics</h3>
+                                    <button
+                                        onClick={() => handleNavigation('saved-tests')}
+                                        className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors"
+                                    >
+                                        <i className="fas fa-arrow-left mr-2"></i>
+                                        Back to Tests
+                                    </button>
+                                </div>
+
+                                {/* Statistics Cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-lg shadow-lg">
+                                        <div className="text-3xl font-bold mb-2">{testAnalytics.statistics.bestScore}%</div>
+                                        <div className="text-green-100">Best Score</div>
+                                    </div>
+                                    <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-6 rounded-lg shadow-lg">
+                                        <div className="text-3xl font-bold mb-2">{testAnalytics.statistics.averageScore}%</div>
+                                        <div className="text-blue-100">Average Score</div>
+                                    </div>
+                                    <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-lg shadow-lg">
+                                        <div className="text-3xl font-bold mb-2">{testAnalytics.statistics.latestScore}%</div>
+                                        <div className="text-purple-100">Latest Score</div>
+                                    </div>
+                                    <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white p-6 rounded-lg shadow-lg">
+                                        <div className="text-3xl font-bold mb-2">{testAnalytics.statistics.totalAttempts}</div>
+                                        <div className="text-indigo-100">Total Attempts</div>
+                                    </div>
+                                </div>
+
+                                {/* Score Over Time */}
+                                <div className="bg-white rounded-lg shadow-md p-6">
+                                    <h4 className="text-xl font-bold text-gray-900 mb-4">Score Progress</h4>
+                                    <div className="space-y-3">
+                                        {testAnalytics.attempts.map((attempt, idx) => (
+                                            <div key={attempt.id} className="flex items-center space-x-4">
+                                                <div className="text-sm text-gray-600 w-32">
+                                                    {new Date(attempt.completed_at).toLocaleDateString()}
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="flex items-center space-x-2">
+                                                        <div className="flex-1 bg-gray-200 rounded-full h-6">
+                                                            <div
+                                                                className="bg-gradient-to-r from-purple-600 to-indigo-600 h-6 rounded-full flex items-center justify-end pr-2"
+                                                                style={{ width: `${attempt.percentage}%` }}
+                                                            >
+                                                                <span className="text-xs font-bold text-white">{attempt.percentage}%</span>
+                                                            </div>
+                                                        </div>
+                                                        <span className="text-sm text-gray-600 w-20">
+                                                            {attempt.score}/{attempt.total_questions}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                                    attempt.mode === 'exam' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                                                }`}>
+                                                    {attempt.mode}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Question Performance */}
+                                <div className="bg-white rounded-lg shadow-md p-6">
+                                    <h4 className="text-xl font-bold text-gray-900 mb-4">Weakest Questions</h4>
+                                    <p className="text-sm text-gray-600 mb-4">Questions with lowest accuracy (most mistakes)</p>
+                                    <div className="space-y-2">
+                                        {testAnalytics.questionPerformance.slice(0, 10).map(q => (
+                                            <div key={q.question_number} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                                <div className="flex items-center space-x-4">
+                                                    <span className="font-bold text-gray-900">Q{q.question_number}</span>
+                                                    <div className="w-48 bg-gray-200 rounded-full h-4">
+                                                        <div
+                                                            className={`h-4 rounded-full ${q.accuracy < 50 ? 'bg-red-500' : q.accuracy < 80 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                                                            style={{ width: `${q.accuracy}%` }}
+                                                        ></div>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="font-bold text-gray-900">{q.accuracy}%</div>
+                                                    <div className="text-xs text-gray-600">{q.correct_count}/{q.total_attempts} correct</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Mode Selection Modal */}
+                        {showModeModal && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                                <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                                    <h3 className="text-2xl font-bold text-gray-900 mb-4">Select Test Mode</h3>
+
+                                    <div className="space-y-4 mb-6">
+                                        <button
+                                            onClick={() => setTestMode('practice')}
+                                            className={`w-full p-4 rounded-lg border-2 transition-all text-left ${
+                                                testMode === 'practice'
+                                                    ? 'border-green-600 bg-green-50'
+                                                    : 'border-gray-200 hover:border-green-300'
+                                            }`}
+                                        >
+                                            <div className="flex items-start">
+                                                <i className="fas fa-graduation-cap text-2xl text-green-600 mr-3 mt-1"></i>
+                                                <div>
+                                                    <div className="font-bold text-lg text-gray-900">Practice Mode</div>
+                                                    <p className="text-sm text-gray-600 mt-1">
+                                                        Get immediate feedback after each question. You can save progress and resume later.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </button>
+
+                                        <button
+                                            onClick={() => setTestMode('exam')}
+                                            className={`w-full p-4 rounded-lg border-2 transition-all text-left ${
+                                                testMode === 'exam'
+                                                    ? 'border-red-600 bg-red-50'
+                                                    : 'border-gray-200 hover:border-red-300'
+                                            }`}
+                                        >
+                                            <div className="flex items-start">
+                                                <i className="fas fa-file-alt text-2xl text-red-600 mr-3 mt-1"></i>
+                                                <div>
+                                                    <div className="font-bold text-lg text-gray-900">Exam Mode</div>
+                                                    <p className="text-sm text-gray-600 mt-1">
+                                                        No feedback until the end. Must complete in one session. Optional timer.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    </div>
+
+                                    {testMode === 'exam' && (
+                                        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Timer (minutes) - Optional
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={timerDuration}
+                                                onChange={(e) => setTimerDuration(parseInt(e.target.value) || 0)}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+                                                placeholder="Enter minutes (0 = no timer)"
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">Set to 0 for no time limit</p>
+                                        </div>
+                                    )}
+
+                                    <div className="flex space-x-3">
+                                        <button
+                                            onClick={() => {
+                                                setShowModeModal(false);
+                                                setTestMode(null);
+                                            }}
+                                            className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={confirmTestMode}
+                                            disabled={!testMode}
+                                            className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            Start Test
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Save Test Modal */}
+                        {showSaveModal && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                                <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                                    <h3 className="text-2xl font-bold text-gray-900 mb-4">Save Test</h3>
+
+                                    <div className="mb-6">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Test Title
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={testTitle}
+                                            onChange={(e) => setTestTitle(e.target.value)}
+                                            placeholder="e.g., Nursing Fundamentals Chapter 5"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent"
+                                            autoFocus
+                                        />
+                                    </div>
+
+                                    {error && (
+                                        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                                            {error}
+                                        </div>
+                                    )}
+
+                                    <div className="flex space-x-3">
+                                        <button
+                                            onClick={() => {
+                                                setShowSaveModal(false);
+                                                setTestTitle('');
+                                                setError('');
+                                            }}
+                                            className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={saveTest}
+                                            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                                        >
+                                            <i className="fas fa-save mr-2"></i>
+                                            Save
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
             };
 
             // Wellness Tracker Component

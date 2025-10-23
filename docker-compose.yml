@@ -1,11 +1,15 @@
-version: '3.8'
 
 services:
   nursing-webapp:
-    build: .
+    build:
+      context: .
+      network: host
     container_name: nursing-organizer
     ports:
       - "5008:5008"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     environment:
       - FLASK_ENV=production
       - FLASK_APP=app.py
