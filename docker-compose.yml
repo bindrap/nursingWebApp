@@ -13,9 +13,15 @@ services:
     environment:
       - FLASK_ENV=production
       - FLASK_APP=app.py
+      # Ollama Cloud API configuration (set these in your .env file or here)
+      - OLLAMA_HOST=${OLLAMA_HOST:-https://ollama.com}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gpt-oss:120b-cloud}
     volumes:
       # Mount data directory for SQLite database persistence
       - ./data:/app/data
+      # Mount audio storage directory for recordings
+      - ./audio_storage:/app/audio_storage
       # Mount favicon directory
       - ./favicon_io:/app/favicon_io
     restart: unless-stopped

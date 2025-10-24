@@ -10,9 +10,11 @@ ENV PYTHONUNBUFFERED=1
 ENV FLASK_APP=app.py
 ENV FLASK_ENV=production
 
-# Install system dependencies
+# Install system dependencies including FFmpeg for audio processing
 RUN apt-get update && apt-get install -y \
     gcc \
+    ffmpeg \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -24,15 +26,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create directory for SQLite database
-RUN mkdir -p /app/data
+# Create directories for SQLite database and audio storage
+RUN mkdir -p /app/data /app/audio_storage
 
 # Expose port
 EXPOSE 5008
 
-# Create a non-root user
+# Create a non-root user and set permissions
 RUN adduser --disabled-password --gecos '' appuser && \
-    chown -R appuser:appuser /app
+    chown -R appuser:appuser /app && \
+    chmod -R 755 /app/data /app/audio_storage
 USER appuser
 
 # Health check
