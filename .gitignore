@@ -1,3 +1,23 @@
 /qwenv
 /whatever
 nursing_app.db
+
+# Audio recordings (user data - should not be in git)
+audio_storage/
+
+# Database and data files
+data/
+*.db
+
+# Python virtual environments
+venv/
+env/
+*.pyc
+__pycache__/
+
+# Environment variables
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
