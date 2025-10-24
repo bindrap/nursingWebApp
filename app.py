@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import sqlite3
 import json
@@ -11,6 +11,8 @@ from docx import Document
 from pptx import Presentation
 import io
 from ollama import Client
+import time
+from pywhispercpp.model import Model
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -28,9 +30,28 @@ ollama_client = Client(
 
 # File Upload Configuration
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
+AUDIO_FOLDER = os.path.join(os.path.dirname(__file__), 'audio_storage')
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'docx', 'doc', 'md', 'pptx', 'ppt'}
+ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'wav', 'webm', 'm4a', 'ogg', 'flac'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['AUDIO_FOLDER'] = AUDIO_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200 MB max file size
+
+# Create folders if they don't exist
+if not os.path.exists(AUDIO_FOLDER):
+    os.makedirs(AUDIO_FOLDER)
+
+# Initialize Whisper model (lazy load)
+whisper_model = None
+
+def get_whisper_model():
+    """Lazy load Whisper model"""
+    global whisper_model
+    if whisper_model is None:
+        print("Loading Whisper model (this may take a moment on first run)...")
+        whisper_model = Model('base', n_threads=4)  # base model, 4 threads
+        print("Whisper model loaded successfully!")
+    return whisper_model
 
 # Database setup
 # Database configuration
@@ -265,6 +286,23 @@ def init_database():
             is_correct BOOLEAN,
             answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (attempt_id) REFERENCES test_attempts(id)
+        )
+    ''')
+
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS audio_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            audio_file_path TEXT,
+            transcript TEXT,
+            enhanced_notes TEXT,
+            duration_seconds INTEGER,
+            file_size_mb REAL,
+            transcription_time_seconds INTEGER,
+            lecture_date DATE,
+            course TEXT,
+            is_enhanced BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
@@ -1091,6 +1129,266 @@ def get_test_analytics(test_id):
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# Audio-to-Notes API Routes
+
+@app.route('/api/audio/transcribe', methods=['POST'])
+def transcribe_audio():
+    """Transcribe uploaded audio file"""
+    try:
+        if 'audio' not in request.files:
+            return jsonify({'error': 'No audio file provided'}), 400
+
+        audio_file = request.files['audio']
+        if audio_file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+
+        # Get metadata from form
+        title = request.form.get('title', 'Untitled Audio Note')
+        course = request.form.get('course', '')
+        lecture_date = request.form.get('lecture_date', '')
+        enhance = request.form.get('enhance', 'false') == 'true'
+
+        # Save audio file
+        filename = secure_filename(f"{int(time.time())}_{audio_file.filename}")
+        file_path = os.path.join(app.config['AUDIO_FOLDER'], filename)
+        audio_file.save(file_path)
+
+        # Get file size in MB
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+
+        print(f"=== Starting transcription of {filename} ({file_size_mb:.2f} MB) ===")
+
+        # Transcribe audio
+        start_time = time.time()
+        model = get_whisper_model()
+        transcript_segments = model.transcribe(file_path)
+
+        # Convert segments to string (pywhispercpp returns a list of segments)
+        if isinstance(transcript_segments, list):
+            # Extract just the text from each segment, ignoring timestamps
+            transcript_parts = []
+            for seg in transcript_segments:
+                if isinstance(seg, dict):
+                    transcript_parts.append(seg.get('text', '').strip())
+                else:
+                    # If it's a string with timestamps (e.g., "t0=0, t1=600, text=..."), extract just the text
+                    seg_str = str(seg)
+                    if 'text=' in seg_str:
+                        text_part = seg_str.split('text=')[-1].strip()
+                        transcript_parts.append(text_part)
+                    else:
+                        transcript_parts.append(seg_str.strip())
+            transcript = ' '.join(transcript_parts)
+        else:
+            transcript = str(transcript_segments)
+
+        transcription_time = int(time.time() - start_time)
+
+        print(f"✓ Transcription completed in {transcription_time}s")
+        print(f"Transcript length: {len(transcript)} characters")
+
+        # Enhance with AI if requested
+        enhanced_notes = None
+        if enhance:
+            print("Enhancing notes with AI...")
+            enhanced_notes = enhance_transcript_with_ai(transcript, course)
+
+        # Save to database
+        conn = get_db_connection()
+        cursor = conn.execute('''
+            INSERT INTO audio_notes (title, audio_file_path, transcript, enhanced_notes,
+                                    file_size_mb, transcription_time_seconds, lecture_date,
+                                    course, is_enhanced)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (title, filename, transcript, enhanced_notes, file_size_mb, transcription_time,
+              lecture_date, course, enhance))
+        conn.commit()
+        note_id = cursor.lastrowid
+        conn.close()
+
+        return jsonify({
+            'id': note_id,
+            'transcript': transcript,
+            'enhanced_notes': enhanced_notes,
+            'transcription_time_seconds': transcription_time,
+            'file_size_mb': round(file_size_mb, 2),
+            'success': True
+        })
+
+    except Exception as e:
+        print(f"ERROR in transcribe_audio: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/audio/notes', methods=['GET', 'POST'])
+def audio_notes():
+    """Get all audio notes or create a new one"""
+    conn = get_db_connection()
+
+    if request.method == 'GET':
+        try:
+            notes = conn.execute('''
+                SELECT * FROM audio_notes
+                ORDER BY created_at DESC
+            ''').fetchall()
+            conn.close()
+            return jsonify([dict(row) for row in notes])
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    elif request.method == 'POST':
+        # For saving manually created notes
+        try:
+            data = request.json
+            cursor = conn.execute('''
+                INSERT INTO audio_notes (title, transcript, enhanced_notes, lecture_date,
+                                        course, is_enhanced)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (data.get('title'), data.get('transcript'), data.get('enhanced_notes'),
+                  data.get('lecture_date'), data.get('course'), data.get('is_enhanced', False)))
+            conn.commit()
+            note_id = cursor.lastrowid
+            conn.close()
+            return jsonify({'id': note_id, 'success': True}), 201
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/audio/notes/<int:note_id>', methods=['GET', 'PUT', 'DELETE'])
+def audio_note_detail(note_id):
+    """Get, update, or delete a specific audio note"""
+    conn = get_db_connection()
+
+    if request.method == 'GET':
+        try:
+            note = conn.execute('SELECT * FROM audio_notes WHERE id = ?', (note_id,)).fetchone()
+            conn.close()
+            if note:
+                return jsonify(dict(note))
+            else:
+                return jsonify({'error': 'Note not found'}), 404
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    elif request.method == 'PUT':
+        try:
+            data = request.json
+            conn.execute('''
+                UPDATE audio_notes
+                SET title = ?, transcript = ?, enhanced_notes = ?,
+                    lecture_date = ?, course = ?
+                WHERE id = ?
+            ''', (data.get('title'), data.get('transcript'), data.get('enhanced_notes'),
+                  data.get('lecture_date'), data.get('course'), note_id))
+            conn.commit()
+            conn.close()
+            return jsonify({'success': True})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    elif request.method == 'DELETE':
+        try:
+            # Get audio file path before deleting
+            note = conn.execute('SELECT audio_file_path FROM audio_notes WHERE id = ?', (note_id,)).fetchone()
+            if note and note['audio_file_path']:
+                # Delete audio file from disk
+                file_path = os.path.join(app.config['AUDIO_FOLDER'], note['audio_file_path'])
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+
+            conn.execute('DELETE FROM audio_notes WHERE id = ?', (note_id,))
+            conn.commit()
+            conn.close()
+            return jsonify({'success': True})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+@app.route('/api/audio/enhance', methods=['POST'])
+def enhance_notes():
+    """Enhance existing transcript with AI"""
+    try:
+        data = request.json
+        transcript = data.get('transcript', '')
+        course = data.get('course', '')
+
+        if not transcript:
+            return jsonify({'error': 'No transcript provided'}), 400
+
+        enhanced = enhance_transcript_with_ai(transcript, course)
+
+        # Update database if note_id provided
+        note_id = data.get('note_id')
+        if note_id:
+            conn = get_db_connection()
+            conn.execute('''
+                UPDATE audio_notes
+                SET enhanced_notes = ?, is_enhanced = 1
+                WHERE id = ?
+            ''', (enhanced, note_id))
+            conn.commit()
+            conn.close()
+
+        return jsonify({'enhanced_notes': enhanced, 'success': True})
+
+    except Exception as e:
+        print(f"ERROR in enhance_notes: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/audio/files/<filename>', methods=['GET'])
+def serve_audio_file(filename):
+    """Serve audio file for playback"""
+    try:
+        file_path = os.path.join(app.config['AUDIO_FOLDER'], secure_filename(filename))
+        if os.path.exists(file_path):
+            return send_file(file_path, mimetype='audio/webm')
+        else:
+            return jsonify({'error': 'Audio file not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def enhance_transcript_with_ai(transcript, course=''):
+    """Use Ollama to clean up and format transcript into readable notes"""
+    try:
+        course_context = f" from the {course} lecture" if course else ""
+
+        prompt = f"""You are a helpful transcript editor. Clean up and format this audio transcript{course_context} to make it easy to read.
+
+RAW TRANSCRIPT:
+{transcript}
+
+Your task:
+1. Remove timestamps and technical markers (t0=, t1=, etc.)
+2. Fix spelling errors and grammar mistakes
+3. Add proper punctuation and capitalization
+4. Break into clear paragraphs based on topic changes (use double line breaks between paragraphs)
+5. Use markdown formatting for better readability:
+   - Use **bold** for important terms and key concepts
+   - Use ## headings for major sections
+   - Use - bullet points for lists
+   - Use `code` formatting for technical terms, commands, or code
+   - Use ```code blocks``` for multi-line code examples
+6. Keep the original meaning and content intact
+7. Make it look professional and well-organized
+
+Return ONLY the cleaned, formatted transcript with markdown. No extra commentary or meta-text."""
+
+        response = ollama_client.generate(
+            model=OLLAMA_MODEL,
+            prompt=prompt,
+            options={
+                'num_predict': 8000,
+                'temperature': 0.7
+            }
+        )
+
+        return response['response']
+
+    except Exception as e:
+        print(f"Error enhancing transcript: {str(e)}")
+        return None
 
 if __name__ == '__main__':
     # Initialize database on startup

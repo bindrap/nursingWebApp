@@ -2788,6 +2788,7 @@
                 { id: 'requirements', label: 'Requirements', icon: 'fas fa-clipboard-check' },
                 { id: 'study', label: 'Study', icon: 'fas fa-graduation-cap' },
                 { id: 'ai-test', label: 'AI Test Gen', icon: 'fas fa-robot' },
+                { id: 'audioNotes', label: 'Audio Notes', icon: 'fas fa-microphone' },
                 { id: 'goals', label: 'Goals', icon: 'fas fa-bullseye' },
                 { id: 'wellness', label: 'Wellness', icon: 'fas fa-heart' }
             ];
@@ -2802,6 +2803,7 @@
                     case 'requirements': return <RequirementsTracker />;
                     case 'study': return <StudyPlanner />;
                     case 'ai-test': return <AITestGenerator />;
+                    case 'audioNotes': return <AudioToNotes />;
                     case 'goals': return <GoalsTracker />;
                     case 'wellness': return <WellnessTracker />;
                     default: return <Dashboard />;
@@ -4101,6 +4103,815 @@
                                     </div>
                                 </div>
                             </div>
+                        )}
+                    </div>
+                );
+            };
+
+            // Audio to Notes Component
+            const AudioToNotes = () => {
+                const [activeView, setActiveView] = useState('library'); // 'library', 'record', 'upload'
+                const [audioNotes, setAudioNotes] = useState([]);
+                const [isRecording, setIsRecording] = useState(false);
+                const [isPaused, setIsPaused] = useState(false);
+                const [recordingTime, setRecordingTime] = useState(0);
+                const [mediaRecorder, setMediaRecorder] = useState(null);
+                const [audioChunks, setAudioChunks] = useState([]);
+                const [isTranscribing, setIsTranscribing] = useState(false);
+                const [transcriptionProgress, setTranscriptionProgress] = useState(null);
+                const [uploadFile, setUploadFile] = useState(null);
+                const [noteTitle, setNoteTitle] = useState('');
+                const [noteCourse, setNoteCourse] = useState('');
+                const [lectureDate, setLectureDate] = useState(new Date().toISOString().split('T')[0]);
+                const [enhanceWithAI, setEnhanceWithAI] = useState(true);
+                const [viewingNote, setViewingNote] = useState(null);
+                const [showRawTranscript, setShowRawTranscript] = useState(false);
+                const [audioBlob, setAudioBlob] = useState(null);
+
+                // Load all audio notes on mount
+                useEffect(() => {
+                    loadAudioNotes();
+                }, []);
+
+                // Recording timer
+                useEffect(() => {
+                    let interval = null;
+                    if (isRecording && !isPaused) {
+                        interval = setInterval(() => {
+                            setRecordingTime(prev => prev + 1);
+                        }, 1000);
+                    }
+                    return () => {
+                        if (interval) clearInterval(interval);
+                    };
+                }, [isRecording, isPaused]);
+
+                const loadAudioNotes = async () => {
+                    try {
+                        const response = await fetch(`${API_BASE}/audio/notes`);
+                        if (response.ok) {
+                            const notes = await response.json();
+                            setAudioNotes(notes);
+                        }
+                    } catch (err) {
+                        console.error('Failed to load audio notes:', err);
+                    }
+                };
+
+                const startRecording = async () => {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        const recorder = new MediaRecorder(stream, {
+                            mimeType: 'audio/webm;codecs=opus'
+                        });
+
+                        const chunks = [];
+                        recorder.ondataavailable = (e) => {
+                            if (e.data.size > 0) {
+                                chunks.push(e.data);
+                            }
+                        };
+
+                        recorder.onstop = () => {
+                            const blob = new Blob(chunks, { type: 'audio/webm' });
+                            setAudioBlob(blob);
+                            stream.getTracks().forEach(track => track.stop());
+                        };
+
+                        recorder.start();
+                        setMediaRecorder(recorder);
+                        setAudioChunks(chunks);
+                        setIsRecording(true);
+                        setRecordingTime(0);
+                    } catch (err) {
+                        alert('Microphone access denied. Please enable microphone permissions.');
+                        console.error('Recording error:', err);
+                    }
+                };
+
+                const pauseRecording = () => {
+                    if (mediaRecorder && mediaRecorder.state === 'recording') {
+                        mediaRecorder.pause();
+                        setIsPaused(true);
+                    }
+                };
+
+                const resumeRecording = () => {
+                    if (mediaRecorder && mediaRecorder.state === 'paused') {
+                        mediaRecorder.resume();
+                        setIsPaused(false);
+                    }
+                };
+
+                const stopRecording = () => {
+                    if (mediaRecorder) {
+                        mediaRecorder.stop();
+                        setIsRecording(false);
+                        setIsPaused(false);
+                    }
+                };
+
+                const discardRecording = () => {
+                    if (mediaRecorder && isRecording) {
+                        mediaRecorder.stop();
+                    }
+                    setIsRecording(false);
+                    setIsPaused(false);
+                    setRecordingTime(0);
+                    setAudioBlob(null);
+                    setAudioChunks([]);
+                    setMediaRecorder(null);
+                };
+
+                const transcribeAudio = async (audioFile) => {
+                    setIsTranscribing(true);
+                    setTranscriptionProgress({ status: 'Uploading audio...', percent: 10 });
+
+                    try {
+                        const formData = new FormData();
+                        formData.append('audio', audioFile);
+                        formData.append('title', noteTitle || 'Untitled Lecture');
+                        formData.append('course', noteCourse);
+                        formData.append('lecture_date', lectureDate);
+                        formData.append('enhance', enhanceWithAI ? 'true' : 'false');
+
+                        setTranscriptionProgress({ status: 'Transcribing... (this may take a few minutes)', percent: 30 });
+
+                        const response = await fetch(`${API_BASE}/audio/transcribe`, {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.error || 'Transcription failed');
+                        }
+
+                        const result = await response.json();
+
+                        setTranscriptionProgress({
+                            status: `Complete! Processed in ${result.transcription_time_seconds}s`,
+                            percent: 100
+                        });
+
+                        // Reset form
+                        setNoteTitle('');
+                        setNoteCourse('');
+                        setLectureDate(new Date().toISOString().split('T')[0]);
+                        setAudioBlob(null);
+                        setUploadFile(null);
+
+                        // Reload notes and show library
+                        await loadAudioNotes();
+                        setTimeout(() => {
+                            setActiveView('library');
+                            setIsTranscribing(false);
+                            setTranscriptionProgress(null);
+                        }, 2000);
+
+                    } catch (err) {
+                        setTranscriptionProgress({ status: `Error: ${err.message}`, percent: 0 });
+                        setTimeout(() => {
+                            setIsTranscribing(false);
+                            setTranscriptionProgress(null);
+                        }, 3000);
+                    }
+                };
+
+                const handleUploadFile = (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        setUploadFile(file);
+                    }
+                };
+
+                const formatTime = (seconds) => {
+                    const hrs = Math.floor(seconds / 3600);
+                    const mins = Math.floor((seconds % 3600) / 60);
+                    const secs = seconds % 60;
+                    if (hrs > 0) {
+                        return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    }
+                    return `${mins}:${secs.toString().padStart(2, '0')}`;
+                };
+
+                const deleteNote = async (noteId) => {
+                    if (!confirm('Delete this audio note? This cannot be undone.')) return;
+
+                    try {
+                        const response = await fetch(`${API_BASE}/audio/notes/${noteId}`, {
+                            method: 'DELETE'
+                        });
+                        if (response.ok) {
+                            await loadAudioNotes();
+                            if (viewingNote && viewingNote.id === noteId) {
+                                setViewingNote(null);
+                            }
+                        }
+                    } catch (err) {
+                        alert('Failed to delete note');
+                    }
+                };
+
+                const enhanceExistingNote = async (noteId) => {
+                    try {
+                        setIsTranscribing(true);
+                        setTranscriptionProgress({ status: 'Enhancing with AI...', percent: 50 });
+
+                        const response = await fetch(`${API_BASE}/audio/enhance`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ note_id: noteId })
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Enhancement failed');
+                        }
+
+                        const result = await response.json();
+
+                        // Update viewing note if it's the one being enhanced
+                        if (viewingNote && viewingNote.id === noteId) {
+                            setViewingNote({ ...viewingNote, enhanced_notes: result.enhanced_notes, is_enhanced: 1 });
+                        }
+
+                        await loadAudioNotes();
+                        setTranscriptionProgress({ status: 'Enhancement complete!', percent: 100 });
+                        setTimeout(() => {
+                            setIsTranscribing(false);
+                            setTranscriptionProgress(null);
+                        }, 2000);
+
+                    } catch (err) {
+                        setTranscriptionProgress({ status: `Error: ${err.message}`, percent: 0 });
+                        setTimeout(() => {
+                            setIsTranscribing(false);
+                            setTranscriptionProgress(null);
+                        }, 3000);
+                    }
+                };
+
+                // Recording View
+                const renderRecordView = () => (
+                    <div className="space-y-6">
+                        <div className="bg-white rounded-lg shadow-md p-6">
+                            <h3 className="text-xl font-semibold mb-4 text-gray-800">
+                                <i className="fas fa-microphone mr-2 text-red-500"></i>
+                                Record Live Lecture
+                            </h3>
+
+                            {!isRecording && !audioBlob && (
+                                <div className="text-center py-8">
+                                    <div className="text-6xl mb-4">
+                                        <i className="fas fa-microphone text-gray-300"></i>
+                                    </div>
+                                    <p className="text-gray-600 mb-6">Ready to record your lecture</p>
+                                    <button
+                                        onClick={startRecording}
+                                        className="px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                                    >
+                                        <i className="fas fa-circle mr-2"></i>
+                                        Start Recording
+                                    </button>
+                                </div>
+                            )}
+
+                            {isRecording && (
+                                <div className="text-center py-8">
+                                    <div className="text-6xl mb-4 animate-pulse">
+                                        <i className="fas fa-microphone text-red-500"></i>
+                                    </div>
+                                    <div className="text-3xl font-mono mb-6 text-gray-800">
+                                        {formatTime(recordingTime)}
+                                    </div>
+                                    <div className="flex justify-center gap-4">
+                                        {!isPaused ? (
+                                            <button
+                                                onClick={pauseRecording}
+                                                className="px-6 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+                                            >
+                                                <i className="fas fa-pause mr-2"></i>
+                                                Pause
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={resumeRecording}
+                                                className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                                            >
+                                                <i className="fas fa-play mr-2"></i>
+                                                Resume
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={stopRecording}
+                                            className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                                        >
+                                            <i className="fas fa-stop mr-2"></i>
+                                            Stop
+                                        </button>
+                                        <button
+                                            onClick={discardRecording}
+                                            className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                                        >
+                                            <i className="fas fa-trash mr-2"></i>
+                                            Discard
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {audioBlob && !isRecording && (
+                                <div className="space-y-4">
+                                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                        <p className="text-green-800">
+                                            <i className="fas fa-check-circle mr-2"></i>
+                                            Recording complete! Duration: {formatTime(recordingTime)}
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <input
+                                            type="text"
+                                            placeholder="Note title (e.g., Pharmacology Lecture 5)"
+                                            value={noteTitle}
+                                            onChange={(e) => setNoteTitle(e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Course (e.g., NRS 101)"
+                                            value={noteCourse}
+                                            onChange={(e) => setNoteCourse(e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                        />
+                                        <input
+                                            type="date"
+                                            value={lectureDate}
+                                            onChange={(e) => setLectureDate(e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                        />
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={enhanceWithAI}
+                                                onChange={(e) => setEnhanceWithAI(e.target.checked)}
+                                                className="w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                                            />
+                                            <span className="text-gray-700">Enhance with AI (structured notes)</span>
+                                        </label>
+                                    </div>
+
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => transcribeAudio(audioBlob)}
+                                            disabled={isTranscribing}
+                                            className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-400"
+                                        >
+                                            <i className="fas fa-magic mr-2"></i>
+                                            Transcribe & Save
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setAudioBlob(null);
+                                                setRecordingTime(0);
+                                            }}
+                                            className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                                        >
+                                            <i className="fas fa-redo mr-2"></i>
+                                            Record Again
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+
+                // Upload View
+                const renderUploadView = () => (
+                    <div className="space-y-6">
+                        <div className="bg-white rounded-lg shadow-md p-6">
+                            <h3 className="text-xl font-semibold mb-4 text-gray-800">
+                                <i className="fas fa-upload mr-2 text-blue-500"></i>
+                                Upload Audio File
+                            </h3>
+
+                            <div className="space-y-4">
+                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-purple-400 transition-colors">
+                                    <i className="fas fa-file-audio text-6xl text-gray-300 mb-4"></i>
+                                    <p className="text-gray-600 mb-4">
+                                        Supported formats: MP3, WAV, M4A, WEBM, OGG, FLAC
+                                    </p>
+                                    <label className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer">
+                                        <i className="fas fa-folder-open mr-2"></i>
+                                        Choose Audio File
+                                        <input
+                                            type="file"
+                                            accept=".mp3,.wav,.m4a,.webm,.ogg,.flac,audio/*"
+                                            onChange={handleUploadFile}
+                                            className="hidden"
+                                        />
+                                    </label>
+                                </div>
+
+                                {uploadFile && (
+                                    <div className="space-y-4">
+                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                            <p className="text-blue-800">
+                                                <i className="fas fa-file-audio mr-2"></i>
+                                                {uploadFile.name} ({(uploadFile.size / 1024 / 1024).toFixed(2)} MB)
+                                            </p>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <input
+                                                type="text"
+                                                placeholder="Note title (e.g., Anatomy Lecture 3)"
+                                                value={noteTitle}
+                                                onChange={(e) => setNoteTitle(e.target.value)}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                            />
+                                            <input
+                                                type="text"
+                                                placeholder="Course (e.g., NRS 102)"
+                                                value={noteCourse}
+                                                onChange={(e) => setNoteCourse(e.target.value)}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                            />
+                                            <input
+                                                type="date"
+                                                value={lectureDate}
+                                                onChange={(e) => setLectureDate(e.target.value)}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                            />
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={enhanceWithAI}
+                                                    onChange={(e) => setEnhanceWithAI(e.target.checked)}
+                                                    className="w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+                                                />
+                                                <span className="text-gray-700">Enhance with AI (structured notes)</span>
+                                            </label>
+                                        </div>
+
+                                        <div className="flex gap-3">
+                                            <button
+                                                onClick={() => transcribeAudio(uploadFile)}
+                                                disabled={isTranscribing}
+                                                className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-400"
+                                            >
+                                                <i className="fas fa-magic mr-2"></i>
+                                                Transcribe & Save
+                                            </button>
+                                            <button
+                                                onClick={() => setUploadFile(null)}
+                                                className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                                            >
+                                                <i className="fas fa-times mr-2"></i>
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+
+                // Library View
+                const renderLibraryView = () => (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center">
+                            <h3 className="text-xl font-semibold text-gray-800">
+                                <i className="fas fa-folder-open mr-2 text-purple-500"></i>
+                                My Audio Notes ({audioNotes.length})
+                            </h3>
+                        </div>
+
+                        {audioNotes.length === 0 ? (
+                            <div className="bg-white rounded-lg shadow-md p-12 text-center">
+                                <i className="fas fa-music text-6xl text-gray-300 mb-4"></i>
+                                <p className="text-gray-600 mb-4">No audio notes yet</p>
+                                <p className="text-gray-500 text-sm mb-6">
+                                    Record a lecture or upload an audio file to get started
+                                </p>
+                                <div className="flex justify-center gap-3">
+                                    <button
+                                        onClick={() => setActiveView('record')}
+                                        className="px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                                    >
+                                        <i className="fas fa-microphone mr-2"></i>
+                                        Record
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveView('upload')}
+                                        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                    >
+                                        <i className="fas fa-upload mr-2"></i>
+                                        Upload
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {audioNotes.map(note => (
+                                    <div key={note.id} className="bg-white rounded-lg shadow-md p-4 hover:shadow-lg transition-shadow">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div className="flex-1">
+                                                <h4 className="font-semibold text-gray-800">{note.title}</h4>
+                                                {note.course && (
+                                                    <p className="text-sm text-purple-600">{note.course}</p>
+                                                )}
+                                            </div>
+                                            {note.is_enhanced ? (
+                                                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                                                    <i className="fas fa-magic mr-1"></i>AI
+                                                </span>
+                                            ) : (
+                                                <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                                                    Raw
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <div className="text-xs text-gray-500 space-y-1 mb-3">
+                                            {note.lecture_date && (
+                                                <p><i className="fas fa-calendar mr-1"></i>{note.lecture_date}</p>
+                                            )}
+                                            {note.audio_file_path && (
+                                                <p className="text-purple-600">
+                                                    <i className="fas fa-headphones mr-1"></i>Audio available
+                                                </p>
+                                            )}
+                                            {note.file_size_mb && (
+                                                <p><i className="fas fa-file mr-1"></i>{note.file_size_mb} MB</p>
+                                            )}
+                                            {note.transcription_time_seconds && (
+                                                <p><i className="fas fa-clock mr-1"></i>Processed in {note.transcription_time_seconds}s</p>
+                                            )}
+                                        </div>
+
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setViewingNote(note)}
+                                                className="flex-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                                            >
+                                                <i className="fas fa-eye mr-1"></i>
+                                                View
+                                            </button>
+                                            {!note.is_enhanced && note.transcript && (
+                                                <button
+                                                    onClick={() => enhanceExistingNote(note.id)}
+                                                    className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                                                    title="Enhance with AI"
+                                                >
+                                                    <i className="fas fa-magic"></i>
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={() => deleteNote(note.id)}
+                                                className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+                                            >
+                                                <i className="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+
+                // Note Detail View
+                const renderNoteDetail = () => {
+                    if (!viewingNote) return null;
+
+                    return (
+                        <div className="space-y-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <button
+                                    onClick={() => setViewingNote(null)}
+                                    className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                                >
+                                    <i className="fas fa-arrow-left mr-2"></i>
+                                    Back
+                                </button>
+                                <h3 className="text-xl font-semibold text-gray-800 flex-1">
+                                    {viewingNote.title}
+                                </h3>
+                            </div>
+
+                            <div className="bg-white rounded-lg shadow-md p-6">
+                                {/* Audio Player */}
+                                {viewingNote.audio_file_path && (
+                                    <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
+                                        <div className="flex items-center mb-2">
+                                            <i className="fas fa-headphones text-purple-600 text-xl mr-2"></i>
+                                            <h4 className="font-semibold text-gray-800">Audio Recording</h4>
+                                        </div>
+                                        <audio
+                                            controls
+                                            className="w-full"
+                                            style={{ height: '40px' }}
+                                        >
+                                            <source src={`${API_BASE}/audio/files/${viewingNote.audio_file_path}`} type="audio/webm" />
+                                            <source src={`${API_BASE}/audio/files/${viewingNote.audio_file_path}`} type="audio/mpeg" />
+                                            Your browser does not support the audio element.
+                                        </audio>
+                                        <p className="text-xs text-gray-500 mt-2">
+                                            <i className="fas fa-info-circle mr-1"></i>
+                                            Listen to the original recording while reading the transcript
+                                        </p>
+                                    </div>
+                                )}
+
+                                <div className="mb-4 pb-4 border-b border-gray-200">
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        {viewingNote.course && (
+                                            <div>
+                                                <span className="text-gray-600">Course:</span>
+                                                <span className="ml-2 text-gray-800 font-medium">{viewingNote.course}</span>
+                                            </div>
+                                        )}
+                                        {viewingNote.lecture_date && (
+                                            <div>
+                                                <span className="text-gray-600">Date:</span>
+                                                <span className="ml-2 text-gray-800 font-medium">{viewingNote.lecture_date}</span>
+                                            </div>
+                                        )}
+                                        {viewingNote.file_size_mb && (
+                                            <div>
+                                                <span className="text-gray-600">File Size:</span>
+                                                <span className="ml-2 text-gray-800 font-medium">{viewingNote.file_size_mb} MB</span>
+                                            </div>
+                                        )}
+                                        {viewingNote.transcription_time_seconds && (
+                                            <div>
+                                                <span className="text-gray-600">Processing Time:</span>
+                                                <span className="ml-2 text-gray-800 font-medium">{viewingNote.transcription_time_seconds}s</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {viewingNote.is_enhanced && viewingNote.enhanced_notes && (
+                                    <div className="mb-4">
+                                        <button
+                                            onClick={() => setShowRawTranscript(!showRawTranscript)}
+                                            className="text-sm text-purple-600 hover:text-purple-700"
+                                        >
+                                            <i className={`fas fa-${showRawTranscript ? 'magic' : 'file-alt'} mr-1`}></i>
+                                            {showRawTranscript ? 'Show Enhanced Notes' : 'Show Raw Transcript'}
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div className="prose prose-lg max-w-none">
+                                    {showRawTranscript || !viewingNote.enhanced_notes ? (
+                                        <div>
+                                            <h4 className="text-lg font-semibold mb-3 text-gray-800">
+                                                <i className="fas fa-file-alt mr-2"></i>Transcript
+                                            </h4>
+                                            <div className="whitespace-pre-wrap text-gray-700 bg-gray-50 p-4 rounded-lg leading-relaxed">
+                                                {viewingNote.transcript || 'No transcript available'}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <h4 className="text-lg font-semibold mb-4 text-gray-800">
+                                                <i className="fas fa-magic mr-2 text-green-500"></i>Enhanced Notes
+                                            </h4>
+                                            <div
+                                                className="enhanced-notes-content"
+                                                dangerouslySetInnerHTML={{
+                                                    __html: (() => {
+                                                        let html = viewingNote.enhanced_notes;
+
+                                                        // Convert markdown-style formatting to HTML
+                                                        // Bold text (**text** or __text__)
+                                                        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+                                                        html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+
+                                                        // Italic text (*text* or _text_)
+                                                        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+                                                        html = html.replace(/_(.+?)_/g, '<em>$1</em>');
+
+                                                        // Code blocks (```...```)
+                                                        html = html.replace(/```(\w*)\n([\s\S]+?)```/g,
+                                                            '<pre class="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-4"><code>$2</code></pre>');
+
+                                                        // Inline code (`code`)
+                                                        html = html.replace(/`([^`]+)`/g,
+                                                            '<code class="bg-gray-100 text-red-600 px-2 py-1 rounded text-sm">$1</code>');
+
+                                                        // Headers (##, ###)
+                                                        html = html.replace(/^### (.+)$/gm, '<h3 class="text-lg font-semibold mt-6 mb-3 text-gray-800">$1</h3>');
+                                                        html = html.replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold mt-8 mb-4 text-gray-900">$1</h2>');
+                                                        html = html.replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold mt-8 mb-4 text-gray-900">$1</h1>');
+
+                                                        // Bullet lists (- or *)
+                                                        html = html.replace(/^[\-\*] (.+)$/gm, '<li class="ml-4">$1</li>');
+                                                        html = html.replace(/(<li class="ml-4">.*<\/li>)/s, '<ul class="list-disc list-inside space-y-2 my-4">$1</ul>');
+
+                                                        // Numbered lists
+                                                        html = html.replace(/^\d+\. (.+)$/gm, '<li class="ml-4">$1</li>');
+                                                        html = html.replace(/(<li class="ml-4">.*<\/li>)/s, '<ol class="list-decimal list-inside space-y-2 my-4">$1</ol>');
+
+                                                        // Paragraphs (double newlines)
+                                                        html = html.replace(/\n\n/g, '</p><p class="mb-4 leading-relaxed text-gray-700">');
+                                                        html = '<p class="mb-4 leading-relaxed text-gray-700">' + html + '</p>';
+
+                                                        // Single newlines to <br>
+                                                        html = html.replace(/\n/g, '<br/>');
+
+                                                        return html;
+                                                    })()
+                                                }}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                };
+
+                return (
+                    <div className="max-w-7xl mx-auto">
+                        {viewingNote ? (
+                            renderNoteDetail()
+                        ) : (
+                            <>
+                                {/* Transcription Progress Overlay */}
+                                {isTranscribing && transcriptionProgress && (
+                                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                                        <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+                                            <div className="text-center">
+                                                <div className="text-5xl mb-4">
+                                                    <i className="fas fa-spinner fa-spin text-purple-600"></i>
+                                                </div>
+                                                <h3 className="text-xl font-semibold mb-2 text-gray-800">
+                                                    {transcriptionProgress.status}
+                                                </h3>
+                                                <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
+                                                    <div
+                                                        className="bg-purple-600 h-3 rounded-full transition-all duration-300"
+                                                        style={{ width: `${transcriptionProgress.percent}%` }}
+                                                    />
+                                                </div>
+                                                <p className="text-sm text-gray-600">
+                                                    {transcriptionProgress.percent < 100
+                                                        ? 'Please wait...'
+                                                        : 'Redirecting to your notes...'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Tab Navigation */}
+                                <div className="mb-6 flex gap-2">
+                                    <button
+                                        onClick={() => setActiveView('library')}
+                                        className={`px-6 py-3 rounded-lg transition-colors ${
+                                            activeView === 'library'
+                                                ? 'bg-purple-600 text-white'
+                                                : 'bg-white text-gray-700 hover:bg-gray-100'
+                                        }`}
+                                    >
+                                        <i className="fas fa-folder-open mr-2"></i>
+                                        My Notes
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveView('record')}
+                                        className={`px-6 py-3 rounded-lg transition-colors ${
+                                            activeView === 'record'
+                                                ? 'bg-red-500 text-white'
+                                                : 'bg-white text-gray-700 hover:bg-gray-100'
+                                        }`}
+                                    >
+                                        <i className="fas fa-microphone mr-2"></i>
+                                        Record
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveView('upload')}
+                                        className={`px-6 py-3 rounded-lg transition-colors ${
+                                            activeView === 'upload'
+                                                ? 'bg-blue-600 text-white'
+                                                : 'bg-white text-gray-700 hover:bg-gray-100'
+                                        }`}
+                                    >
+                                        <i className="fas fa-upload mr-2"></i>
+                                        Upload
+                                    </button>
+                                </div>
+
+                                {/* Active View Content */}
+                                {activeView === 'library' && renderLibraryView()}
+                                {activeView === 'record' && renderRecordView()}
+                                {activeView === 'upload' && renderUploadView()}
+                            </>
                         )}
                     </div>
                 );
