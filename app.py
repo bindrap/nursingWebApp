@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, redirect
 from flask_cors import CORS
 import sqlite3
 import json
@@ -49,7 +49,11 @@ def get_whisper_model():
     global whisper_model
     if whisper_model is None:
         print("Loading Whisper model (this may take a moment on first run)...")
-        whisper_model = Model('base', n_threads=4)  # base model, 4 threads
+        # Force CPU mode by setting environment variables
+        os.environ['GGML_CUDA_NO_PINNED'] = '1'
+        os.environ['WHISPER_NO_GPU'] = '1'
+        # Initialize with minimal parameters to avoid GPU
+        whisper_model = Model('base', n_threads=4, print_progress=False)
         print("Whisper model loaded successfully!")
     return whisper_model
 
@@ -649,6 +653,12 @@ def favicon():
     from flask import send_from_directory
     return send_from_directory('favicon_io', 'favicon.ico')
 
+@app.route('/cert.pem')
+def serve_certificate():
+    """Serve SSL certificate for manual installation on iOS"""
+    from flask import send_from_directory
+    return send_from_directory('ssl', 'cert.pem', mimetype='application/x-pem-file')
+
 @app.route('/api/backup', methods=['GET'])
 def backup_data():
     """Export all data as JSON for backup"""
@@ -1227,20 +1237,16 @@ def audio_notes():
     """Get all audio notes or create a new one"""
     conn = get_db_connection()
 
-    if request.method == 'GET':
-        try:
+    try:
+        if request.method == 'GET':
             notes = conn.execute('''
                 SELECT * FROM audio_notes
                 ORDER BY created_at DESC
             ''').fetchall()
-            conn.close()
             return jsonify([dict(row) for row in notes])
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
 
-    elif request.method == 'POST':
-        # For saving manually created notes
-        try:
+        elif request.method == 'POST':
+            # For saving manually created notes
             data = request.json
             cursor = conn.execute('''
                 INSERT INTO audio_notes (title, transcript, enhanced_notes, lecture_date,
@@ -1250,29 +1256,29 @@ def audio_notes():
                   data.get('lecture_date'), data.get('course'), data.get('is_enhanced', False)))
             conn.commit()
             note_id = cursor.lastrowid
-            conn.close()
             return jsonify({'id': note_id, 'success': True}), 201
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+    except Exception as e:
+        print(f"ERROR in audio_notes: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
 
 @app.route('/api/audio/notes/<int:note_id>', methods=['GET', 'PUT', 'DELETE'])
 def audio_note_detail(note_id):
     """Get, update, or delete a specific audio note"""
     conn = get_db_connection()
 
-    if request.method == 'GET':
-        try:
+    try:
+        if request.method == 'GET':
             note = conn.execute('SELECT * FROM audio_notes WHERE id = ?', (note_id,)).fetchone()
-            conn.close()
             if note:
                 return jsonify(dict(note))
             else:
                 return jsonify({'error': 'Note not found'}), 404
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
 
-    elif request.method == 'PUT':
-        try:
+        elif request.method == 'PUT':
             data = request.json
             conn.execute('''
                 UPDATE audio_notes
@@ -1282,13 +1288,9 @@ def audio_note_detail(note_id):
             ''', (data.get('title'), data.get('transcript'), data.get('enhanced_notes'),
                   data.get('lecture_date'), data.get('course'), note_id))
             conn.commit()
-            conn.close()
             return jsonify({'success': True})
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
 
-    elif request.method == 'DELETE':
-        try:
+        elif request.method == 'DELETE':
             # Get audio file path before deleting
             note = conn.execute('SELECT audio_file_path FROM audio_notes WHERE id = ?', (note_id,)).fetchone()
             if note and note['audio_file_path']:
@@ -1299,14 +1301,19 @@ def audio_note_detail(note_id):
 
             conn.execute('DELETE FROM audio_notes WHERE id = ?', (note_id,))
             conn.commit()
-            conn.close()
             return jsonify({'success': True})
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+    except Exception as e:
+        print(f"ERROR in audio_note_detail: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
 
 @app.route('/api/audio/enhance', methods=['POST'])
 def enhance_notes():
     """Enhance existing transcript with AI"""
+    conn = None
     try:
         data = request.json
         transcript = data.get('transcript', '')
@@ -1327,7 +1334,6 @@ def enhance_notes():
                 WHERE id = ?
             ''', (enhanced, note_id))
             conn.commit()
-            conn.close()
 
         return jsonify({'enhanced_notes': enhanced, 'success': True})
 
@@ -1336,6 +1342,9 @@ def enhance_notes():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
 
 @app.route('/api/audio/files/<filename>', methods=['GET'])
 def serve_audio_file(filename):
@@ -1393,6 +1402,19 @@ Return ONLY the cleaned, formatted transcript with markdown. No extra commentary
 if __name__ == '__main__':
     # Initialize database on startup
     init_database()
-    
-    # Run the app
-    app.run(debug=True, host='0.0.0.0', port=5008)
+
+    # SSL Configuration - Try Tailscale cert first, then self-signed
+    ssl_dir = os.path.join(os.path.dirname(__file__), 'ssl')
+    tailscale_cert = os.path.join(ssl_dir, 'tailscale-cert.pem')
+    tailscale_key = os.path.join(ssl_dir, 'tailscale-key.pem')
+
+    # Check for Tailscale certificates (valid, trusted certs)
+    if os.path.exists(tailscale_cert) and os.path.exists(tailscale_key):
+        print("Starting server with HTTPS using Tailscale certificate on port 5008")
+        print("Access via: https://dell-inspiron-gandalf.tailcb397d.ts.net:5008")
+        app.run(debug=False, host='0.0.0.0', port=5008,
+                ssl_context=(tailscale_cert, tailscale_key))
+    else:
+        print("WARNING: Tailscale SSL certificates not found, starting with HTTP")
+        print(f"Expected certificates at: {tailscale_cert} and {tailscale_key}")
+        app.run(debug=False, host='0.0.0.0', port=5008)

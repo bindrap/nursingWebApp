@@ -17,6 +17,9 @@ services:
       - OLLAMA_HOST=${OLLAMA_HOST:-https://ollama.com}
       - OLLAMA_API_KEY=${OLLAMA_API_KEY}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-gpt-oss:120b-cloud}
+      # Disable GPU for Whisper to prevent crashes
+      - GGML_CUDA_NO_PINNED=1
+      - WHISPER_NO_GPU=1
     volumes:
       # Mount data directory for SQLite database persistence
       - ./data:/app/data
@@ -24,9 +27,13 @@ services:
       - ./audio_storage:/app/audio_storage
       # Mount favicon directory
       - ./favicon_io:/app/favicon_io
+      # Mount SSL certificates for HTTPS
+      - ./ssl:/app/ssl
+      # Mount Whisper model cache to avoid re-downloading on every transcription
+      - ./whisper_cache:/home/appuser/.local/share/pywhispercpp
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5008/"]
+      test: ["CMD", "curl", "-f", "-k", "https://localhost:5008/"]
       interval: 30s
       timeout: 10s
       retries: 3

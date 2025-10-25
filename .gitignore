@@ -21,3 +21,9 @@ __pycache__/
 # OS files
 .DS_Store
 Thumbs.db
+whisper_cache/
+
+# SSL certificates and private keys (security - should never be in git)
+ssl/*.pem
+ssl/*.key
+ssl/*.crt

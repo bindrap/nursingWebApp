@@ -4,6 +4,47 @@ A comprehensive web application for nursing students with AI-powered test genera
 
 ## Quick Setup Guide
 
+### Option A: Docker Deployment (Recommended for Production)
+
+**Prerequisites:**
+- Docker and Docker Compose installed
+- Tailscale SSL certificates (for HTTPS access)
+
+**Quick Start:**
+```bash
+# Build and start the container
+docker-compose up -d
+
+# Check container status
+docker ps | grep nursing
+
+# View logs
+docker logs nursing-organizer
+
+# Stop container
+docker-compose down
+```
+
+**Features:**
+- ✅ Gunicorn production WSGI server (2 workers, unlimited timeout)
+- ✅ CPU-only Whisper transcription (no GPU required)
+- ✅ Persistent data storage (database, audio files, model cache)
+- ✅ HTTPS support with Tailscale certificates
+- ✅ Auto-restart on failure
+- ✅ Health checks every 30 seconds
+
+**Access:**
+- Local: `https://localhost:5008`
+- Tailscale: `https://your-machine-name.tailnet.ts.net:5008`
+
+**Important Notes:**
+- First audio transcription will download Whisper model (~141MB, takes 40-60 seconds)
+- Model is cached permanently in `./whisper_cache/` - subsequent transcriptions are fast
+- Audio files stored in `./audio_storage/`
+- Database persists in `./data/nursing_app.db`
+
+### Option B: Local Development Setup
+
 ### 1. Install System Dependencies
 ```bash
 # Install FFmpeg (required for audio transcription)
@@ -84,11 +125,16 @@ Open `database_enabled_frontend.html` in your browser. The app will automaticall
 nursing WebApp/
 ├── app.py                          # Flask backend server
 ├── database_enabled_frontend.html  # Main frontend application
+├── Dockerfile                      # Docker container configuration
+├── docker-compose.yml              # Docker Compose orchestration
+├── requirements.txt                # Python dependencies
 ├── .env                            # Ollama Cloud API credentials
+├── audioIssue.md                   # Audio transcription troubleshooting guide
 ├── data/
 │   └── nursing_app.db              # SQLite database (auto-created)
 ├── audio_storage/                  # Saved audio recordings (auto-created)
-├── requirements.txt                # Python dependencies
+├── whisper_cache/                  # Whisper model cache (Docker only)
+├── ssl/                            # Tailscale SSL certificates
 ├── favicon_io/                     # Favicon files
 └── README.md
 ```
@@ -142,6 +188,7 @@ app.run(debug=True, host='0.0.0.0', port=5009)
 ```
 
 ### Audio Transcription Errors
+
 **"FFMPEG is not installed"**:
 - Install FFmpeg (see setup instructions above)
 - Verify installation: `ffmpeg -version`
@@ -154,11 +201,25 @@ app.run(debug=True, host='0.0.0.0', port=5009)
 **Transcription taking too long**:
 - First run downloads Whisper model (~140MB) - this is normal
 - Subsequent transcriptions are much faster
-- GPU acceleration speeds up processing significantly
+- Docker deployment uses CPU-only mode (no GPU required)
+
+**Network error / ERR_EMPTY_RESPONSE on remote access**:
+- ✅ **FIXED**: Upgrade to production deployment with Docker
+- Issue was caused by Flask development server not handling long-running transcriptions
+- Solution: Gunicorn production server with unlimited timeout
+- See `audioIssue.md` for full technical details
+
+**Worker crashes (exit code 132)**:
+- ✅ **FIXED**: pywhispercpp now compiled in CPU-only mode
+- Previous issue: GPU-compiled binary crashed on CPU-only systems
+- Solution: Force CPU-only compilation via environment variables in Dockerfile
+- Docker deployment automatically uses CPU-only mode
 
 **Audio playback not working**:
 - Browser must support HTML5 audio (webm/mp3)
 - Check if audio file exists in `audio_storage/` folder
+
+For complete troubleshooting details, see [audioIssue.md](audioIssue.md)
 
 ### AI Test Generation Taking Too Long
 - Large files (100+ questions) may take 2-5 minutes
@@ -171,18 +232,32 @@ app.run(debug=True, host='0.0.0.0', port=5009)
 
 ## Technical Details
 - **Frontend**: React (via Babel), Tailwind CSS
-- **Backend**: Flask (Python 3.x)
+- **Backend**: Flask (Python 3.x) with Gunicorn WSGI server (production)
+- **Deployment**: Docker with docker-compose orchestration
 - **Database**: SQLite with 15+ tables for comprehensive data management
 - **AI Engine**: Ollama Cloud API (gpt-oss:120b-cloud model)
-- **Speech Recognition**: Whisper.cpp (base model) with GPU acceleration
+- **Speech Recognition**: Whisper.cpp (base model) - CPU-only mode for stability
 - **Audio Processing**: FFmpeg for format conversion
 - **File Processing**: Supports PDF, DOCX, PPTX, TXT, MD formats
 - **Audio Formats**: MP3, WAV, M4A, WEBM, OGG, FLAC
 - **Max Upload Size**: 200MB per request
+- **Security**: HTTPS with Tailscale SSL certificates
+- **Performance**: 2 sync workers, unlimited timeout for long transcriptions
 
 ## Recent Updates
 
-### Audio-to-Notes Feature (Latest)
+### Production Deployment & Audio Transcription Fixes (2025-10-25)
+- ✅ **Docker containerization** with docker-compose for easy deployment
+- ✅ **Gunicorn production server** replacing Flask dev server
+- ✅ **Fixed remote audio transcription** - resolved `ERR_EMPTY_RESPONSE` network errors
+- ✅ **CPU-only Whisper mode** - fixed worker crashes (exit code 132) on systems without GPU
+- ✅ **Persistent model caching** - Whisper model downloads once, cached permanently
+- ✅ **Unlimited timeout** for long-running transcriptions
+- ✅ **HTTPS support** with Tailscale SSL certificates
+- ✅ **Health checks** and auto-restart on failure
+- ✅ **Tested and confirmed working** on remote devices via Tailscale
+
+### Audio-to-Notes Feature
 - ✅ Live lecture recording with browser microphone
 - ✅ Audio file upload support (multiple formats)
 - ✅ Whisper.cpp integration for accurate transcription

@@ -251,15 +251,20 @@
             return context;
         };
 
-        // API Configuration
-        const API_BASE = 'http://localhost:5008/api';
+        // API Configuration - Use current protocol and host
+        const API_BASE = `${window.location.protocol}//${window.location.host}/api`;
 
         // API Helper Functions
         const api = {
             async get(endpoint) {
-                const response = await fetch(`${API_BASE}${endpoint}`);
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                return await response.json();
+                try {
+                    const response = await fetch(`${API_BASE}${endpoint}`);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    return await response.json();
+                } catch (error) {
+                    console.error(`Fetch error for ${endpoint}:`, error);
+                    throw new Error(`Network error: ${error.message}. Make sure you're using HTTPS (https://) in the URL`);
+                }
             },
             
             async post(endpoint, data) {
@@ -455,7 +460,9 @@
 
                 } catch (err) {
                     console.error('Error loading data:', err);
-                    setError('Failed to connect to database. Make sure the Flask server is running.');
+                    console.error('API Base URL:', API_BASE);
+                    console.error('Current URL:', window.location.href);
+                    setError(`Failed to connect to database: ${err.message}. API: ${API_BASE}`);
                 } finally {
                     setLoading(false);
                 }
@@ -4148,13 +4155,25 @@
 
                 const loadAudioNotes = async () => {
                     try {
+                        console.log('Loading audio notes from:', `${API_BASE}/audio/notes`);
                         const response = await fetch(`${API_BASE}/audio/notes`);
+                        console.log('Audio notes response:', response.status, response.statusText);
+
                         if (response.ok) {
                             const notes = await response.json();
+                            console.log('Loaded', notes.length, 'audio notes');
                             setAudioNotes(notes);
+                        } else {
+                            console.error('Failed to load audio notes. Status:', response.status);
                         }
                     } catch (err) {
                         console.error('Failed to load audio notes:', err);
+                        console.error('Error details:', err.name, err.message);
+
+                        // Show error to user if it's a network error
+                        if (err.message === 'Failed to fetch' || err.message === 'Load failed') {
+                            alert('Cannot connect to server to load audio notes. Please check your connection and make sure you are using HTTPS.');
+                        }
                     }
                 };
 
@@ -4228,6 +4247,10 @@
                     setTranscriptionProgress({ status: 'Uploading audio...', percent: 10 });
 
                     try {
+                        console.log('Starting transcription...');
+                        console.log('API_BASE:', API_BASE);
+                        console.log('File:', audioFile.name, 'Size:', (audioFile.size / 1024 / 1024).toFixed(2), 'MB');
+
                         const formData = new FormData();
                         formData.append('audio', audioFile);
                         formData.append('title', noteTitle || 'Untitled Lecture');
@@ -4237,17 +4260,27 @@
 
                         setTranscriptionProgress({ status: 'Transcribing... (this may take a few minutes)', percent: 30 });
 
+                        console.log('Sending request to:', `${API_BASE}/audio/transcribe`);
                         const response = await fetch(`${API_BASE}/audio/transcribe`, {
                             method: 'POST',
                             body: formData
                         });
 
+                        console.log('Response status:', response.status, response.statusText);
+
                         if (!response.ok) {
-                            const error = await response.json();
-                            throw new Error(error.error || 'Transcription failed');
+                            let errorMessage = 'Transcription failed';
+                            try {
+                                const error = await response.json();
+                                errorMessage = error.error || errorMessage;
+                            } catch (e) {
+                                errorMessage = `Server error: ${response.status} ${response.statusText}`;
+                            }
+                            throw new Error(errorMessage);
                         }
 
                         const result = await response.json();
+                        console.log('Transcription successful');
 
                         setTranscriptionProgress({
                             status: `Complete! Processed in ${result.transcription_time_seconds}s`,
@@ -4270,11 +4303,20 @@
                         }, 2000);
 
                     } catch (err) {
-                        setTranscriptionProgress({ status: `Error: ${err.message}`, percent: 0 });
+                        console.error('Transcription error:', err);
+                        console.error('Error type:', err.name);
+                        console.error('Error message:', err.message);
+
+                        let errorMsg = err.message;
+                        if (err.message === 'Failed to fetch' || err.message === 'Load failed' || err.name === 'TypeError') {
+                            errorMsg = 'Network error: Cannot connect to server. Please check:\n1. You are using HTTPS\n2. Server is running\n3. No firewall blocking';
+                        }
+
+                        setTranscriptionProgress({ status: `Error: ${errorMsg}`, percent: 0 });
                         setTimeout(() => {
                             setIsTranscribing(false);
                             setTranscriptionProgress(null);
-                        }, 3000);
+                        }, 8000);
                     }
                 };
 
